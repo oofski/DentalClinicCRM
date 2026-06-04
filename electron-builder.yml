@@ -1,0 +1,54 @@
+appId: com.givingsmiles.clinic
+productName: Giving Smiles
+copyright: Copyright © 2026 Giving Smiles Dental
+
+directories:
+  buildResources: resources
+  output: release/${version}
+
+# electron-vite externalizes the runtime dependencies, so they must ship in the package.
+# These three packages are dependency-free, so including their folders is sufficient.
+files:
+  - out/**/*
+  - package.json
+  - '!node_modules/**/*'
+  - node_modules/sql.js/**/*
+  - node_modules/bcryptjs/**/*
+  - node_modules/nodemailer/**/*
+
+# The sql.js WebAssembly engine must be a real file on disk (cannot run from inside the asar).
+extraResources:
+  - from: node_modules/sql.js/dist/sql-wasm.wasm
+    to: sql-wasm.wasm
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: resources/icon.ico
+  artifactName: GivingSmiles-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Giving Smiles
+  installerHeaderIcon: resources/icon.ico
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+
+# Linux target is used only for local smoke-testing during development.
+linux:
+  target:
+    - AppImage
+  category: Office
+  icon: resources/icon.png
+
+portable:
+  artifactName: GivingSmiles-Portable-${version}.${ext}

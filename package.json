@@ -1,0 +1,45 @@
+{
+  "name": "giving-smiles",
+  "version": "1.0.0",
+  "description": "Giving Smiles - Dental Clinic Management Software (Windows desktop application)",
+  "author": "Giving Smiles Dental",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
+    "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "dist": "electron-vite build && electron-builder",
+    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:linux": "electron-vite build && electron-builder --linux",
+    "smoke": "node scripts/smoke-db.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "nodemailer": "^6.9.14",
+    "sql.js": "^1.12.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.14.0",
+    "@types/nodemailer": "^6.4.15",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/sql.js": "^1.4.9",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0",
+    "signature_pad": "^5.0.2",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0",
+    "zustand": "^4.5.4"
+  }
+}
