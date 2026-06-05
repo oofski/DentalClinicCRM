@@ -5,7 +5,6 @@ import { Users, Patients, Examinations, Notes, Settings } from './repositories'
 import { buildConsentHtml } from './templates/consent'
 import { buildReportHtml } from './templates/report'
 import { renderHtmlToPdf } from './pdf'
-import { toothChartSvgString } from '@shared/toothChart'
 import type { ToothChartData, TreatmentItem, Language } from '@shared/types'
 
 export async function runSelfTest(outDir: string): Promise<void> {
@@ -53,20 +52,22 @@ export async function runSelfTest(outDir: string): Promise<void> {
     { id: '3', description: 'Routine cleaning & polish', tooth: '', priority: 'routine', estimate: '6 months', cost: '$120' }
   ]
 
-  const reportHtml = buildReportHtml({
-    clinic,
-    patient,
-    exam,
-    doctorName: doctor.full_name,
-    notes: Notes.listByExam(examId),
-    treatmentItems: items,
-    toothChartSvg: toothChartSvgString(chart),
-    summaryNote: 'Patient advised on oral hygiene and scheduled for treatment.',
-    approvedAt: new Date().toISOString()
-  })
-  const reportPdf = await renderHtmlToPdf(reportHtml)
-  fs.writeFileSync(`${outDir}/selftest-report.pdf`, reportPdf)
-  console.log('SELFTEST report bytes =', reportPdf.length)
+  for (const lang of ['english', 'spanish', 'arabic'] as Language[]) {
+    const reportHtml = buildReportHtml({
+      clinic,
+      patient,
+      exam,
+      doctorName: doctor.full_name,
+      notes: Notes.listByExam(examId),
+      treatmentItems: items,
+      language: lang,
+      summaryNote: 'Patient advised on oral hygiene and scheduled for treatment.',
+      approvedAt: new Date().toISOString()
+    })
+    const reportPdf = await renderHtmlToPdf(reportHtml)
+    fs.writeFileSync(`${outDir}/selftest-report-${lang}.pdf`, reportPdf)
+    console.log(`SELFTEST report-${lang} bytes =`, reportPdf.length)
+  }
 
   for (const lang of ['english', 'spanish', 'arabic'] as Language[]) {
     const html = buildConsentHtml({

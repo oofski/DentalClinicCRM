@@ -13,15 +13,15 @@ Every push to GitHub automatically builds a Windows installer for you. You do **
 3. Click the workflow **“Build Windows Installer”**, then open the most recent successful run (green ✓).
 4. Scroll to **Artifacts** and download **`GivingSmiles-Windows`** (a `.zip`).
 5. Unzip it. You'll get:
-   - **`GivingSmiles-Setup-1.0.0.exe`** — the installer (recommended).
-   - **`GivingSmiles-Portable-1.0.0.exe`** — a portable version that runs without installing.
+   - **`GivingSmiles-Setup-1.1.0.exe`** — the installer (recommended).
+   - **`GivingSmiles-Portable-1.1.0.exe`** — a portable version that runs without installing.
 
 To build on demand without pushing code: **Actions → Build Windows Installer → Run workflow**.
 
 To produce a versioned **Release** with the installer attached, push a tag:
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 ---
@@ -39,7 +39,7 @@ npm run dist:win
 
 When it finishes, the installer is in:
 ```
-release\1.0.0\GivingSmiles-Setup-1.0.0.exe
+release\1.1.0\GivingSmiles-Setup-1.1.0.exe
 ```
 
 > The build uses no native modules (the database engine is WebAssembly), so it compiles cleanly on a stock Node.js install — no Visual Studio build tools required.
@@ -48,7 +48,7 @@ release\1.0.0\GivingSmiles-Setup-1.0.0.exe
 
 ## 3. Installing on clinic computers
 
-1. Copy `GivingSmiles-Setup-1.0.0.exe` to the computer (USB drive, network share, etc.).
+1. Copy `GivingSmiles-Setup-1.1.0.exe` to the computer (USB drive, network share, etc.).
 2. Double-click it. Choose the install location if prompted; it creates a Desktop and Start-menu shortcut.
 3. Launch **Giving Smiles** and sign in (see accounts in the README).
 

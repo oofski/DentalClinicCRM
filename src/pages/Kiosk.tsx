@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import type { Patient, PatientInput } from '@shared/types'
+import type { Patient, PatientInput, Language } from '@shared/types'
+import { INTAKE_STRINGS } from '@shared/intakeStrings'
 import {
   PatientFields,
   emptyPatientInput,
@@ -13,6 +14,12 @@ import { useToast } from '@/components/ui'
 
 type Step = 'welcome' | 'intake' | 'consent' | 'done'
 
+const LANGS: { key: Language; label: string }[] = [
+  { key: 'english', label: 'English' },
+  { key: 'spanish', label: 'Español' },
+  { key: 'arabic', label: 'العربية' }
+]
+
 export default function Kiosk() {
   const toast = useToast()
   const [step, setStep] = useState<Step>('welcome')
@@ -20,6 +27,10 @@ export default function Kiosk() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [patient, setPatient] = useState<Patient | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const lang = value.preferred_language
+  const t = INTAKE_STRINGS[lang]
+  const setLang = (l: Language) => setValue((v) => ({ ...v, preferred_language: l }))
 
   const reset = () => {
     setValue(emptyPatientInput())
@@ -49,8 +60,22 @@ export default function Kiosk() {
     }
   }
 
+  const LangSwitcher = () => (
+    <div className="row" style={{ gap: 6 }}>
+      {LANGS.map((l) => (
+        <button
+          key={l.key}
+          className={`btn btn-sm ${lang === l.key ? 'btn-primary' : ''}`}
+          onClick={() => setLang(l.key)}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#e8f4fb,#f4f8fb)' }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#e8f4fb,#f4f8fb)' }} dir={t.dir}>
       <div
         style={{
           background: '#fff',
@@ -65,31 +90,49 @@ export default function Kiosk() {
 
       <div style={{ maxWidth: 820, margin: '0 auto', padding: '28px 20px 60px' }}>
         {step === 'welcome' && (
-          <div className="card" style={{ textAlign: 'center', padding: '54px 30px' }}>
-            <h1 style={{ fontSize: 32 }}>Welcome to Giving Smiles</h1>
-            <p className="muted" style={{ fontSize: 17, maxWidth: 520, margin: '8px auto 28px' }}>
-              Please check in for your appointment. It only takes a few minutes — your information stays
-              private and secure on the clinic’s computer.
+          <div className="card" style={{ textAlign: 'center', padding: '48px 30px' }}>
+            <h1 style={{ fontSize: 32 }}>{t.welcomeTitle}</h1>
+            <p className="muted" style={{ fontSize: 17, maxWidth: 520, margin: '8px auto 22px' }}>
+              {t.welcomeBody}
             </p>
-            <button className="btn btn-primary btn-lg" style={{ fontSize: 18, padding: '15px 40px' }} onClick={() => setStep('intake')}>
-              Begin Check-In
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+              {t.chooseLanguage}
+            </div>
+            <div className="row" style={{ justifyContent: 'center', marginBottom: 26 }}>
+              <LangSwitcher />
+            </div>
+            <button
+              className="btn btn-primary btn-lg"
+              style={{ fontSize: 18, padding: '15px 40px' }}
+              onClick={() => setStep('intake')}
+            >
+              {t.begin}
             </button>
           </div>
         )}
 
         {step === 'intake' && (
           <div className="stack">
-            <h1>Your Information</h1>
+            <div className="row between wrap" style={{ gap: 10 }}>
+              <h1 style={{ margin: 0 }}>{t.yourInfo}</h1>
+              <LangSwitcher />
+            </div>
             <p className="muted" style={{ marginTop: -8 }}>
-              Fields marked <span className="req">*</span> are required.
+              {t.requiredNote}
             </p>
-            <PatientFields value={value} onChange={setValue} errors={errors} />
+            <PatientFields
+              value={value}
+              onChange={setValue}
+              errors={errors}
+              formLang={lang}
+              showLanguageSelect={false}
+            />
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <button className="btn" onClick={reset}>
-                Cancel
+                {t.cancel}
               </button>
               <button className="btn btn-primary btn-lg" disabled={busy} onClick={submitIntake}>
-                {busy ? 'Saving…' : 'Continue to Consent →'}
+                {busy ? '…' : t.continueConsent}
               </button>
             </div>
           </div>
@@ -97,9 +140,9 @@ export default function Kiosk() {
 
         {step === 'consent' && patient && (
           <div className="stack">
-            <h1>Consent Form</h1>
+            <h1>{t.consentTitle}</h1>
             <p className="muted" style={{ marginTop: -8 }}>
-              Please review and sign below.
+              {t.consentReview}
             </p>
             <ConsentCapture patient={patient} onComplete={() => setStep('done')} />
           </div>
@@ -108,13 +151,12 @@ export default function Kiosk() {
         {step === 'done' && (
           <div className="card" style={{ textAlign: 'center', padding: '54px 30px' }}>
             <div style={{ fontSize: 56 }}>✅</div>
-            <h1>Thank you!</h1>
+            <h1>{t.thankYouTitle}</h1>
             <p className="muted" style={{ fontSize: 17, maxWidth: 460, margin: '8px auto 28px' }}>
-              You’re all checked in. Please hand the device back to the front desk — your dentist will
-              see you shortly.
+              {t.thankYouBody}
             </p>
             <button className="btn btn-lg" onClick={reset}>
-              Start a New Check-In
+              {t.newCheckIn}
             </button>
           </div>
         )}

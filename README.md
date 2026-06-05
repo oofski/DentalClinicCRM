@@ -29,6 +29,15 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 - **Accounts & security** — three roles, bcrypt-hashed passwords, 30-minute inactivity auto-logout, activity log.
 - **Settings** — clinic info, optional SMTP for one-click report emailing, user management, and database backup.
 
+### New in v1.1.0
+- **Treatment reports in the patient's language** — headings/labels render in English, Spanish, or Arabic (RTL) based on the patient's preference. Your typed notes stay exactly as written. Fully offline.
+- **Read consent aloud** — a button reads the consent form using the computer's built-in voice (offline; Spanish/Arabic use Windows language voices if installed).
+- **Translated Check-In** — the patient kiosk form (labels + common allergy/condition picks) appears in the patient's chosen language; the doctor portal stays English.
+- **Quick-pick medical history** — common allergies & conditions as one-tap chips, with an "Other" box; medications stay free-text.
+- **Tooth chart "mark all, then work backwards"** — set every tooth to one condition (e.g. Healthy) and change only the exceptions.
+- **Quick-delete a patient** (Doctor/Admin) — removes the record; signed PDFs stay archived on disk.
+- **Version number** shown at the bottom of the sidebar; simplified Dental section (Referring Doctor & Insurance removed).
+
 ## Sign-in accounts
 
 Three accounts are created automatically on first launch:
@@ -49,7 +58,7 @@ You don't build anything by hand. There are two ways to get the installer:
 This repository includes a GitHub Actions workflow that builds the Windows installer automatically.
 1. In GitHub, open the **Actions** tab → **Build Windows Installer** → the most recent run.
 2. Download the **`GivingSmiles-Windows`** artifact (a zip).
-3. Inside you'll find **`GivingSmiles-Setup-1.0.0.exe`** (installer) and a portable `.exe`.
+3. Inside you'll find **`GivingSmiles-Setup-1.1.0.exe`** (installer) and a portable `.exe`.
 4. Copy the installer to each clinic computer and run it. (Windows SmartScreen may warn about an unsigned app — choose *More info → Run anyway*. See [BUILD_AND_INSTALL.md](BUILD_AND_INSTALL.md) about code signing.)
 
 ### Option B — Build it yourself on a Windows PC
@@ -57,7 +66,7 @@ This repository includes a GitHub Actions workflow that builds the Windows insta
 npm install
 npm run dist:win
 ```
-The installer appears in `release\1.0.0\`. Full steps in **[BUILD_AND_INSTALL.md](BUILD_AND_INSTALL.md)**.
+The installer appears in `release\1.1.0\`. Full steps in **[BUILD_AND_INSTALL.md](BUILD_AND_INSTALL.md)**.
 
 ## Running in development
 

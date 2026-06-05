@@ -50,6 +50,7 @@ export interface Api {
     count(): Promise<number>
     fullRecord(id: number): Promise<PatientFullRecord | null>
     printSummary(id: number): Promise<{ ok: boolean; error?: string }>
+    delete(id: number): Promise<{ ok: boolean; error?: string }>
   }
   exams: {
     create(patientId: number, examDate: string): Promise<{ ok: boolean; data: Examination }>
@@ -128,7 +129,7 @@ export interface Api {
     openFolder(): Promise<string>
     backup(): Promise<{ ok: boolean; path?: string; error?: string }>
   }
-  app: { info(): Promise<{ dataDir: string; dbPath: string }> }
+  app: { info(): Promise<{ dataDir: string; dbPath: string; version: string }> }
   kiosk: { open(): Promise<Ok<boolean>> }
 }
 

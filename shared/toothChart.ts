@@ -84,7 +84,12 @@ export function colorFor(data: ToothChartData, number: number): string {
   return CONDITION_COLORS[st?.condition ?? 'unexamined']
 }
 
-export function toothChartSvgString(data: ToothChartData): string {
+export function toothChartSvgString(
+  data: ToothChartData,
+  labels?: { upper?: string; lower?: string }
+): string {
+  const upperLabel = labels?.upper ?? 'UPPER'
+  const lowerLabel = labels?.lower ?? 'LOWER'
   const layout = computeLayout()
   const guides = archGuides()
   const teeth = layout
@@ -104,8 +109,8 @@ export function toothChartSvgString(data: ToothChartData): string {
     })
     .join('')
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEW.w} ${VIEW.h}" width="${VIEW.w}" height="${VIEW.h}">
-    <text x="450" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="${COLORS.muted}" text-anchor="middle">UPPER</text>
-    <text x="450" y="${VIEW.h - 8}" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="${COLORS.muted}" text-anchor="middle">LOWER</text>
+    <text x="450" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="${COLORS.muted}" text-anchor="middle">${upperLabel}</text>
+    <text x="450" y="${VIEW.h - 8}" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="${COLORS.muted}" text-anchor="middle">${lowerLabel}</text>
     <path d="${guides.upper}" fill="none" stroke="${COLORS.azureSoft}" stroke-width="26" stroke-linecap="round"/>
     <path d="${guides.lower}" fill="none" stroke="${COLORS.azureSoft}" stroke-width="26" stroke-linecap="round"/>
     ${teeth}

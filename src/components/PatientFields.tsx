@@ -1,4 +1,12 @@
-import type { PatientInput } from '@shared/types'
+import type { PatientInput, Language } from '@shared/types'
+import {
+  INTAKE_STRINGS,
+  COMMON_ALLERGIES,
+  COMMON_CONDITIONS,
+  optLabel,
+  type PickOption
+} from '@shared/intakeStrings'
+import { COLORS } from '@shared/branding'
 import { Field } from './ui'
 
 export function emptyPatientInput(): PatientInput {
@@ -47,36 +55,119 @@ export function normalizePatient(p: PatientInput): PatientInput {
     medical_conditions: opt(p.medical_conditions),
     medications: opt(p.medications),
     dental_history: opt(p.dental_history),
-    insurance_info: opt(p.insurance_info),
-    referring_doctor: opt(p.referring_doctor)
+    insurance_info: null,
+    referring_doctor: null
   }
+}
+
+// ---- Quick-pick helpers (store canonical English keys; show translated labels) ----
+function parsePicks(value: string | null, options: PickOption[]): { selected: string[]; other: string } {
+  const keys = new Set(options.map((o) => o.key))
+  const tokens = (value || '').split(',').map((s) => s.trim()).filter(Boolean)
+  const selected: string[] = []
+  const others: string[] = []
+  for (const tok of tokens) {
+    if (keys.has(tok)) selected.push(tok)
+    else others.push(tok)
+  }
+  return { selected, other: others.join(', ') }
+}
+
+function buildPicks(selected: string[], other: string): string {
+  const parts = [...selected]
+  if (other.trim()) parts.push(other.trim())
+  return parts.join(', ')
+}
+
+function PickField({
+  label,
+  options,
+  value,
+  lang,
+  otherPlaceholder,
+  onChange
+}: {
+  label: string
+  options: PickOption[]
+  value: string | null
+  lang: Language
+  otherPlaceholder: string
+  onChange: (v: string) => void
+}) {
+  const { selected, other } = parsePicks(value, options)
+  const toggle = (key: string) => {
+    let next: string[]
+    if (key === 'None') {
+      next = selected.includes('None') ? [] : ['None']
+    } else {
+      const base = selected.filter((k) => k !== 'None')
+      next = base.includes(key) ? base.filter((k) => k !== key) : [...base, key]
+    }
+    onChange(buildPicks(next, key === 'None' && next.length ? '' : other))
+  }
+  const setOther = (txt: string) => {
+    const sel = txt.trim() ? selected.filter((k) => k !== 'None') : selected
+    onChange(buildPicks(sel, txt))
+  }
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <div className="row wrap" style={{ gap: 6, marginBottom: 8 }}>
+        {options.map((o) => {
+          const on = selected.includes(o.key)
+          return (
+            <button
+              key={o.key}
+              type="button"
+              className="btn btn-sm"
+              onClick={() => toggle(o.key)}
+              style={{
+                borderColor: on ? COLORS.azure : undefined,
+                background: on ? COLORS.azureSoft : undefined,
+                color: on ? COLORS.navy : undefined
+              }}
+            >
+              {on ? '✓ ' : ''}
+              {optLabel(o, lang)}
+            </button>
+          )
+        })}
+      </div>
+      <input placeholder={otherPlaceholder} value={other} onChange={(e) => setOther(e.target.value)} />
+    </div>
+  )
 }
 
 export function PatientFields({
   value,
   onChange,
-  errors
+  errors,
+  formLang = 'english',
+  showLanguageSelect = true
 }: {
   value: PatientInput
   onChange: (v: PatientInput) => void
   errors: Record<string, string>
+  formLang?: Language
+  showLanguageSelect?: boolean
 }) {
+  const t = INTAKE_STRINGS[formLang]
   const set = (k: keyof PatientInput, v: string) => onChange({ ...value, [k]: v })
   const val = (v: string | null) => v ?? ''
 
   return (
-    <div className="stack" style={{ gap: 20 }}>
+    <div className="stack" style={{ gap: 20 }} dir={t.dir}>
       <div className="card">
-        <div className="card-title">Personal</div>
+        <div className="card-title">{t.sectionPersonal}</div>
         <div className="grid-2">
-          <Field label="First Name" required error={errors.first_name}>
+          <Field label={t.firstName} required error={errors.first_name}>
             <input
               className={errors.first_name ? 'field-error' : ''}
               value={value.first_name}
               onChange={(e) => set('first_name', e.target.value)}
             />
           </Field>
-          <Field label="Last Name" required error={errors.last_name}>
+          <Field label={t.lastName} required error={errors.last_name}>
             <input
               className={errors.last_name ? 'field-error' : ''}
               value={value.last_name}
@@ -85,7 +176,7 @@ export function PatientFields({
           </Field>
         </div>
         <div className="grid-2">
-          <Field label="Date of Birth" required error={errors.date_of_birth}>
+          <Field label={t.dob} required error={errors.date_of_birth}>
             <input
               type="date"
               className={errors.date_of_birth ? 'field-error' : ''}
@@ -93,26 +184,28 @@ export function PatientFields({
               onChange={(e) => set('date_of_birth', e.target.value)}
             />
           </Field>
-          <Field label="Preferred Language">
-            <select
-              value={value.preferred_language}
-              onChange={(e) => set('preferred_language', e.target.value)}
-            >
-              <option value="english">English</option>
-              <option value="spanish">Spanish (Español)</option>
-              <option value="arabic">Arabic (العربية)</option>
-            </select>
-          </Field>
+          {showLanguageSelect && (
+            <Field label={t.language}>
+              <select
+                value={value.preferred_language}
+                onChange={(e) => set('preferred_language', e.target.value)}
+              >
+                <option value="english">English</option>
+                <option value="spanish">Spanish (Español)</option>
+                <option value="arabic">Arabic (العربية)</option>
+              </select>
+            </Field>
+          )}
         </div>
       </div>
 
       <div className="card">
-        <div className="card-title">Contact</div>
+        <div className="card-title">{t.sectionContact}</div>
         <div className="grid-2">
-          <Field label="Phone">
+          <Field label={t.phone}>
             <input value={val(value.phone)} onChange={(e) => set('phone', e.target.value)} />
           </Field>
-          <Field label="Email" error={errors.email}>
+          <Field label={t.email} error={errors.email}>
             <input
               className={errors.email ? 'field-error' : ''}
               value={val(value.email)}
@@ -120,17 +213,17 @@ export function PatientFields({
             />
           </Field>
         </div>
-        <Field label="Address">
+        <Field label={t.address}>
           <input value={val(value.address)} onChange={(e) => set('address', e.target.value)} />
         </Field>
         <div className="grid-2">
-          <Field label="Emergency Contact Name">
+          <Field label={t.emergencyName}>
             <input
               value={val(value.emergency_contact)}
               onChange={(e) => set('emergency_contact', e.target.value)}
             />
           </Field>
-          <Field label="Emergency Contact Phone">
+          <Field label={t.emergencyPhone}>
             <input
               value={val(value.emergency_phone)}
               onChange={(e) => set('emergency_phone', e.target.value)}
@@ -140,53 +233,39 @@ export function PatientFields({
       </div>
 
       <div className="card">
-        <div className="card-title">Medical History</div>
-        <Field label="Allergies">
+        <div className="card-title">{t.sectionMedical}</div>
+        <PickField
+          label={t.allergies}
+          options={COMMON_ALLERGIES}
+          value={value.allergies}
+          lang={formLang}
+          otherPlaceholder={t.otherPlaceholder}
+          onChange={(v) => set('allergies', v)}
+        />
+        <PickField
+          label={t.conditions}
+          options={COMMON_CONDITIONS}
+          value={value.medical_conditions}
+          lang={formLang}
+          otherPlaceholder={t.otherPlaceholder}
+          onChange={(v) => set('medical_conditions', v)}
+        />
+        <Field label={t.medications}>
           <textarea
-            placeholder="e.g. Penicillin, latex"
-            value={val(value.allergies)}
-            onChange={(e) => set('allergies', e.target.value)}
+            value={val(value.medications)}
+            onChange={(e) => set('medications', e.target.value)}
           />
         </Field>
-        <div className="grid-2">
-          <Field label="Medical Conditions">
-            <textarea
-              placeholder="e.g. Diabetes, hypertension"
-              value={val(value.medical_conditions)}
-              onChange={(e) => set('medical_conditions', e.target.value)}
-            />
-          </Field>
-          <Field label="Current Medications">
-            <textarea
-              value={val(value.medications)}
-              onChange={(e) => set('medications', e.target.value)}
-            />
-          </Field>
-        </div>
       </div>
 
       <div className="card">
-        <div className="card-title">Dental & Insurance</div>
-        <Field label="Dental History (previous treatments, implants, etc.)">
+        <div className="card-title">{t.sectionDental}</div>
+        <Field label={t.dentalHistory}>
           <textarea
             value={val(value.dental_history)}
             onChange={(e) => set('dental_history', e.target.value)}
           />
         </Field>
-        <div className="grid-2">
-          <Field label="Referring Doctor">
-            <input
-              value={val(value.referring_doctor)}
-              onChange={(e) => set('referring_doctor', e.target.value)}
-            />
-          </Field>
-          <Field label="Insurance Information">
-            <input
-              value={val(value.insurance_info)}
-              onChange={(e) => set('insurance_info', e.target.value)}
-            />
-          </Field>
-        </div>
       </div>
     </div>
   )

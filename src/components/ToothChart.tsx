@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { CONDITIONS, SURFACES, CONDITION_LABELS, emptyToothState, TEETH } from '@shared/dental'
+import {
+  CONDITIONS,
+  SURFACES,
+  CONDITION_LABELS,
+  CONDITION_COLORS,
+  emptyToothState,
+  TEETH
+} from '@shared/dental'
 import type { ToothChartData, ToothConditionKey, SurfaceKey, ToothState } from '@shared/types'
 import { COLORS } from '@shared/branding'
 import {
@@ -39,6 +46,28 @@ export function ToothChart({
   const clickTooth = (n: number) => {
     setSelected(n)
     if (brush) update(n, { condition: brush })
+  }
+
+  const markAll = (condition: ToothConditionKey) => {
+    if (readOnly) return
+    const examined = Object.values(value).filter((s) => s && s.condition !== 'unexamined').length
+    if (
+      examined > 0 &&
+      !window.confirm(
+        `Set ALL 32 teeth to "${CONDITION_LABELS[condition]}"? You can then change individual teeth. This overwrites existing tooth conditions.`
+      )
+    )
+      return
+    const next: ToothChartData = {}
+    for (let n = 1; n <= 32; n++) next[n] = { ...stateOf(n), condition }
+    onChange(next)
+  }
+
+  const resetChart = () => {
+    if (readOnly) return
+    if (Object.keys(value).length > 0 && !window.confirm('Clear the entire tooth chart?')) return
+    onChange({})
+    setSelected(null)
   }
 
   const counts = CONDITIONS.filter((c) => c.key !== 'unexamined').map((c) => ({
@@ -123,6 +152,45 @@ export function ToothChart({
             })}
           </svg>
         </div>
+
+        {/* Quick start: mark all one color, then change exceptions */}
+        {!readOnly && (
+          <div className="row wrap" style={{ gap: 8, marginTop: 10, alignItems: 'center' }}>
+            <span className="muted" style={{ fontSize: 12 }}>
+              Quick start:
+            </span>
+            <button className="btn btn-sm" onClick={() => markAll('healthy')} style={{ gap: 6 }}>
+              <span
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: 3,
+                  background: CONDITION_COLORS.healthy,
+                  border: '1px solid rgba(0,0,0,0.2)',
+                  display: 'inline-block'
+                }}
+              />
+              Mark all Healthy
+            </button>
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) markAll(e.target.value as ToothConditionKey)
+              }}
+              style={{ width: 'auto' }}
+            >
+              <option value="">Mark all as…</option>
+              {CONDITIONS.filter((c) => c.key !== 'unexamined').map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <button className="btn btn-sm btn-ghost" onClick={resetChart}>
+              Reset chart
+            </button>
+          </div>
+        )}
 
         {/* Legend / quick-paint brushes */}
         <div className="row wrap" style={{ gap: 8, marginTop: 6 }}>

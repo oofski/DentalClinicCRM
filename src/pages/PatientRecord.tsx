@@ -19,6 +19,7 @@ export default function PatientRecord() {
   const [rec, setRec] = useState<PatientFullRecord | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
   const [viewImg, setViewImg] = useState<ImageWithUrl | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const reload = useCallback(() => {
     api.patients.fullRecord(pid).then(setRec)
@@ -99,6 +100,11 @@ export default function PatientRecord() {
                 <Icon name="tooth" size={15} /> New Examination
               </button>
             )}
+            {canClinical && (
+              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(true)}>
+                Delete
+              </button>
+            )}
           </div>
         </div>
         {hasAlerts && (
@@ -152,10 +158,8 @@ export default function PatientRecord() {
 
       {tab === 'dental' && (
         <div className="card">
-          <div className="card-title">Dental History & Insurance</div>
+          <div className="card-title">Dental History</div>
           <Detail k="Dental History" v={p.dental_history} />
-          <Detail k="Referring Doctor" v={p.referring_doctor} />
-          <Detail k="Insurance" v={p.insurance_info} />
         </div>
       )}
 
@@ -295,6 +299,43 @@ export default function PatientRecord() {
 
       <Modal open={!!viewImg} title="Image" onClose={() => setViewImg(null)} wide>
         {viewImg && <img src={viewImg.url} alt="" style={{ width: '100%', borderRadius: 8 }} />}
+      </Modal>
+
+      <Modal
+        open={confirmDelete}
+        title="Delete this patient?"
+        onClose={() => setConfirmDelete(false)}
+        footer={
+          <>
+            <button className="btn" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={async () => {
+                const r = await api.patients.delete(pid)
+                if (r.ok) {
+                  toast.push('Patient deleted', 'success')
+                  navigate('/patients')
+                } else {
+                  toast.push(r.error || 'Failed to delete', 'error')
+                  setConfirmDelete(false)
+                }
+              }}
+            >
+              Delete Patient
+            </button>
+          </>
+        }
+      >
+        <p>
+          This removes <b>{p.first_name} {p.last_name}</b> ({p.patient_id}) and their records from the
+          app.
+        </p>
+        <p className="muted">
+          Their signed consent and report PDFs stay archived on disk in the patient files folder. This
+          action cannot be undone from within the app.
+        </p>
       </Modal>
     </div>
   )

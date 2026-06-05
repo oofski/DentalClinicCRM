@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
+import { ipcMain, dialog, shell, BrowserWindow, app } from 'electron'
 import { basename, extname } from 'node:path'
 import fs from 'node:fs'
 import {
@@ -19,7 +19,6 @@ import { renderHtmlToPdf, printHtml } from './pdf'
 import { buildConsentHtml } from './templates/consent'
 import { buildReportHtml } from './templates/report'
 import { buildSummaryHtml } from './templates/summary'
-import { toothChartSvgString } from '@shared/toothChart'
 import { emailPdf } from './email'
 import type { User, PatientInput, Language, NoteType, TreatmentItem, Role } from '@shared/types'
 
@@ -124,6 +123,19 @@ export function registerIpc(): void {
       reports: Reports.listByPatient(id),
       images
     }
+  })
+
+  ipcMain.handle('patients:delete', (_e, patientId: number) => {
+    const u = requireUser()
+    if (u.role !== 'admin' && u.role !== 'doctor') {
+      return { ok: false, error: 'Only a doctor or administrator can delete patients' }
+    }
+    const patient = Patients.getById(patientId)
+    if (!patient) return { ok: false, error: 'Patient not found' }
+    // Remove database records. Saved PDFs/images remain archived on disk.
+    Patients.deleteWithRelated(patientId)
+    Audit.log(u.id, null, 'delete_patient', `Deleted ${patient.patient_id} (files kept on disk)`)
+    return { ok: true }
   })
 
   ipcMain.handle('patient:printSummary', async (_e, patientId: number) => {
@@ -266,7 +278,7 @@ export function registerIpc(): void {
         doctorName: exam.doctor_name || u.full_name,
         notes: Notes.listByExam(exam.id),
         treatmentItems: args.treatmentItems || [],
-        toothChartSvg: toothChartSvgString(exam.tooth_chart_data),
+        language: patient.preferred_language,
         summaryNote: args.summaryNote,
         approvedAt
       })
@@ -308,7 +320,7 @@ export function registerIpc(): void {
         doctorName: exam.doctor_name || u.full_name,
         notes: Notes.listByExam(exam.id),
         treatmentItems: args.treatmentItems || [],
-        toothChartSvg: toothChartSvgString(exam.tooth_chart_data),
+        language: patient.preferred_language,
         summaryNote: args.summaryNote,
         approvedAt: null
       })
@@ -423,7 +435,11 @@ export function registerIpc(): void {
     return { ok: true, path: res.filePath }
   })
 
-  ipcMain.handle('app:info', () => ({ dataDir: dataDir(), dbPath: getDbPath() }))
+  ipcMain.handle('app:info', () => ({
+    dataDir: dataDir(),
+    dbPath: getDbPath(),
+    version: app.getVersion()
+  }))
 
   // ---------------- Kiosk window ----------------
   ipcMain.handle('kiosk:open', () => {

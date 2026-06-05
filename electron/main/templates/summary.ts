@@ -57,11 +57,8 @@ export function buildSummaryHtml(input: SummaryRenderInput): string {
 
   const dental = `
   <section>
-    <h2>Dental & Insurance</h2>
-    <p><b>Dental history:</b> ${esc(p.dental_history || '—')}</p>
-    <p><b>Referring doctor:</b> ${esc(p.referring_doctor || '—')} &nbsp; <b>Insurance:</b> ${esc(
-      p.insurance_info || '—'
-    )}</p>
+    <h2>Dental History</h2>
+    <p>${esc(p.dental_history || '—')}</p>
   </section>`
 
   const visitRows =

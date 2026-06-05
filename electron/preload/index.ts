@@ -24,7 +24,8 @@ const api = {
     recent: (limit?: number) => invoke('patients:recent', limit),
     count: () => invoke('patients:count'),
     fullRecord: (id: number) => invoke('patients:fullRecord', id),
-    printSummary: (id: number) => invoke('patient:printSummary', id)
+    printSummary: (id: number) => invoke('patient:printSummary', id),
+    delete: (id: number) => invoke('patients:delete', id)
   },
   exams: {
     create: (patientId: number, examDate: string) => invoke('exams:create', patientId, examDate),

@@ -92,6 +92,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
+  const [version, setVersion] = useState('')
+
+  useEffect(() => {
+    api.app.info().then((i) => setVersion(i.version))
+  }, [])
 
   // Inactivity auto-logout (security requirement: 30 min).
   useEffect(() => {
@@ -162,6 +167,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
           >
             <Icon name="logout" size={16} /> Sign Out
           </button>
+        </div>
+        <div
+          style={{
+            textAlign: 'center',
+            fontSize: 11,
+            marginTop: 10,
+            color: 'rgba(255,255,255,0.45)'
+          }}
+        >
+          Giving Smiles{version ? ` v${version}` : ''}
         </div>
       </aside>
 

@@ -205,6 +205,18 @@ export const Patients = {
       [patientId]
     )
     return r ? r.exam_date : null
+  },
+  // Removes the patient and related DB records. Saved PDFs/images on disk are kept (archived).
+  deleteWithRelated(id: number): void {
+    execute(
+      'DELETE FROM clinical_notes WHERE examination_id IN (SELECT id FROM examinations WHERE patient_id = ?)',
+      [id]
+    )
+    execute('DELETE FROM treatment_reports WHERE patient_id = ?', [id])
+    execute('DELETE FROM examinations WHERE patient_id = ?', [id])
+    execute('DELETE FROM consent_forms WHERE patient_id = ?', [id])
+    execute('DELETE FROM patient_images WHERE patient_id = ?', [id])
+    execute('DELETE FROM patients WHERE id = ?', [id])
   }
 }
 
