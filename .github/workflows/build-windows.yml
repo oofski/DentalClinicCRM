@@ -51,7 +51,7 @@ jobs:
         run: echo "v=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/claude/busy-euler-vcFJl' || startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.ver.outputs.v }}
