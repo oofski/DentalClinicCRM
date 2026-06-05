@@ -15,6 +15,7 @@ import { ToothChart } from '@/components/ToothChart'
 import { toothChartSvgString } from '@/components/toothGeometry'
 import { Icon } from '@/components/icons'
 import { useToast } from '@/components/ui'
+import { DictateButton } from '@/components/Dictate'
 import { formatDate } from '@/lib/format'
 
 const NOTE_TYPES: { key: NoteType; label: string }[] = [
@@ -199,6 +200,7 @@ export default function Exam() {
                 <button className="btn btn-primary btn-sm" onClick={addNote}>
                   <Icon name="plus" size={14} /> Add Note
                 </button>
+                <DictateButton />
               </div>
               <textarea
                 placeholder="Type your finding…"
@@ -211,6 +213,10 @@ export default function Exam() {
                     + {t}
                   </button>
                 ))}
+              </div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                🎤 Dictate types your speech into the focused box using your computer’s built-in voice
+                typing — fully offline.
               </div>
             </div>
           )}
@@ -240,9 +246,12 @@ export default function Exam() {
           <div className="card-title">
             Treatment Plan
             {canClinical && (
-              <button className="btn btn-sm" onClick={addItem}>
-                <Icon name="plus" size={14} /> Add Item
-              </button>
+              <div className="row" style={{ gap: 8 }}>
+                <DictateButton />
+                <button className="btn btn-sm" onClick={addItem}>
+                  <Icon name="plus" size={14} /> Add Item
+                </button>
+              </div>
             )}
           </div>
           {items.length === 0 ? (
@@ -304,7 +313,10 @@ export default function Exam() {
       {/* Report */}
       {canClinical && (
         <div className="card">
-          <div className="card-title">Treatment Report</div>
+          <div className="card-title">
+            Treatment Report
+            <DictateButton />
+          </div>
           <div className="field">
             <label>Report summary (optional)</label>
             <textarea

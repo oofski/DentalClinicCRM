@@ -38,6 +38,9 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 - **Quick-delete a patient** (Doctor/Admin) — removes the record; signed PDFs stay archived on disk.
 - **Version number** shown at the bottom of the sidebar; simplified Dental section (Referring Doctor & Insurance removed).
 
+### New in v1.1.1
+- **Voice typing (offline)** — a 🎤 Dictate button in Clinical Notes, Treatment Plan, and the Report summary focuses the field and lets you dictate with your computer's built-in voice typing (Windows **Win + H**). No internet, and nothing leaves the computer.
+
 ## Sign-in accounts
 
 Three accounts are created automatically on first launch:
@@ -52,13 +55,17 @@ Three accounts are created automatically on first launch:
 
 ## Getting the Windows app
 
+**⬇️ Permanent download link (always the newest version):**
+**https://github.com/oofski/DentalClinicCRM/releases/latest/download/GivingSmiles-Setup.exe**
+(portable: `…/releases/latest/download/GivingSmiles-Portable.exe`)
+
 You don't build anything by hand. There are two ways to get the installer:
 
 ### Option A — Download the pre-built installer (recommended)
 This repository includes a GitHub Actions workflow that builds the Windows installer automatically.
 1. In GitHub, open the **Actions** tab → **Build Windows Installer** → the most recent run.
 2. Download the **`GivingSmiles-Windows`** artifact (a zip).
-3. Inside you'll find **`GivingSmiles-Setup-1.1.0.exe`** (installer) and a portable `.exe`.
+3. Inside you'll find **`GivingSmiles-Setup.exe`** (installer) and a portable `.exe`.
 4. Copy the installer to each clinic computer and run it. (Windows SmartScreen may warn about an unsigned app — choose *More info → Run anyway*. See [BUILD_AND_INSTALL.md](BUILD_AND_INSTALL.md) about code signing.)
 
 ### Option B — Build it yourself on a Windows PC
@@ -66,7 +73,7 @@ This repository includes a GitHub Actions workflow that builds the Windows insta
 npm install
 npm run dist:win
 ```
-The installer appears in `release\1.1.0\`. Full steps in **[BUILD_AND_INSTALL.md](BUILD_AND_INSTALL.md)**.
+The installer appears in `release\<version>\`. Full steps in **[BUILD_AND_INSTALL.md](BUILD_AND_INSTALL.md)**.
 
 ## Running in development
 

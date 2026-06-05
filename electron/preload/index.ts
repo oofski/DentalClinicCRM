@@ -82,7 +82,8 @@ const api = {
   },
   kiosk: {
     open: () => invoke('kiosk:open')
-  }
+  },
+  platform: process.platform
 }
 
 contextBridge.exposeInMainWorld('api', api)

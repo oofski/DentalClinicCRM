@@ -131,6 +131,7 @@ export interface Api {
   }
   app: { info(): Promise<{ dataDir: string; dbPath: string; version: string }> }
   kiosk: { open(): Promise<Ok<boolean>> }
+  platform: string
 }
 
 export const api: Api = window.api

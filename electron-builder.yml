@@ -30,7 +30,7 @@ win:
       arch:
         - x64
   icon: resources/icon.ico
-  artifactName: GivingSmiles-Setup-${version}.${ext}
+  artifactName: GivingSmiles-Setup.${ext}
 
 nsis:
   oneClick: false
@@ -51,4 +51,4 @@ linux:
   icon: resources/icon.png
 
 portable:
-  artifactName: GivingSmiles-Portable-${version}.${ext}
+  artifactName: GivingSmiles-Portable.${ext}
