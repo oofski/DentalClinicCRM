@@ -41,8 +41,8 @@ jobs:
         with:
           name: GivingSmiles-Windows
           path: |
-            release/**/*.exe
-            release/**/*.blockmap
+            release/*/GivingSmiles-*.exe
+            release/*/GivingSmiles-*.exe.blockmap
           if-no-files-found: error
 
       - name: Read app version
@@ -62,5 +62,5 @@ jobs:
             Download **GivingSmiles-Setup-x.y.z.exe** below and run it on each clinic computer.
             (Windows SmartScreen may warn about an unsigned app — choose *More info → Run anyway*.)
           files: |
-            release/**/*.exe
-            release/**/*.blockmap
+            release/*/GivingSmiles-*.exe
+            release/*/GivingSmiles-*.exe.blockmap
