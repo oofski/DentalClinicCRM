@@ -6,6 +6,10 @@ on:
   push:
     branches: ['**']
     tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'scripts/**'
   workflow_dispatch:
 
 concurrency:
