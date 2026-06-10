@@ -5,6 +5,7 @@ import { initDatabase } from './db'
 import { registerIpc, setKioskFactory } from './ipc'
 import { isInsideDataDir } from './files'
 import { stopKioskServer } from './kioskServer'
+import { initUpdater } from './updater'
 
 const RENDERER_URL = process.env['ELECTRON_RENDERER_URL']
 const PRELOAD = join(__dirname, '../preload/index.js')
@@ -140,6 +141,7 @@ app.whenReady().then(async () => {
   )
 
   createMainWindow()
+  initUpdater()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()

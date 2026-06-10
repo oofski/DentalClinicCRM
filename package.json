@@ -1,6 +1,6 @@
 {
   "name": "giving-smiles",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Giving Smiles - Dental Clinic Management Software (Windows desktop application)",
   "author": "Giving Smiles Dental",
   "license": "UNLICENSED",
@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "electron-updater": "^6.8.9",
     "nodemailer": "^6.9.14",
     "sql.js": "^1.12.0"
   },

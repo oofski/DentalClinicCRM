@@ -47,6 +47,9 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 - **Referral templates** — admins/doctors create reusable referral letters per receiving clinic (Settings → *Referral Templates*); generate a referral from any patient record and **print or email** it (auto-pulls medical alerts + latest findings, optional tooth-chart image).
 - **Extraction tooth condition** — a new purple **Extraction** status on the tooth chart, included in the legend, counts, and translated reports.
 
+### New in v1.2.1
+- **Auto-update** — *Settings → Software Updates* (admin) checks this repo's releases, downloads the new version with a progress bar, and installs in place with **Restart & Install** — no more manual re-downloads. A quiet check also runs at startup (offline clinics are unaffected; patient data is never touched by updates).
+
 ## Sign-in accounts
 
 Three accounts are created automatically on first launch:

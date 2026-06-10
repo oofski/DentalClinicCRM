@@ -233,6 +233,24 @@ export interface KioskServerStatus {
   port: number | null
 }
 
+// ---------- Software updates ----------
+export interface UpdateStatus {
+  state:
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'not-available'
+    | 'downloading'
+    | 'downloaded'
+    | 'error'
+    | 'dev'
+  currentVersion: string
+  availableVersion?: string
+  releaseNotes?: string
+  percent?: number
+  error?: string
+}
+
 export interface PatientFullRecord {
   patient: Patient
   lastVisit: string | null

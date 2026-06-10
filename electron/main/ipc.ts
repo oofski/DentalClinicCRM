@@ -26,6 +26,7 @@ import { buildSummaryHtml } from './templates/summary'
 import { buildReferralHtml } from './templates/referral'
 import { emailPdf } from './email'
 import { startKioskServer, stopKioskServer, kioskServerStatus } from './kioskServer'
+import { checkForUpdates, downloadUpdate, quitAndInstall, getUpdateStatus } from './updater'
 import { join } from 'node:path'
 import type {
   User,
@@ -608,6 +609,25 @@ export function registerIpc(): void {
     return { ok: true, status: stopKioskServer() }
   })
   ipcMain.handle('kioskserver:status', () => kioskServerStatus())
+
+  // ---------------- Software updates ----------------
+  ipcMain.handle('updates:status', () => getUpdateStatus())
+  ipcMain.handle('updates:check', () => {
+    requireUser()
+    return checkForUpdates()
+  })
+  ipcMain.handle('updates:download', () => {
+    const u = requireUser()
+    if (u.role !== 'admin') return { ok: false, error: 'Only administrators can install updates' }
+    return downloadUpdate()
+  })
+  ipcMain.handle('updates:install', () => {
+    const u = requireUser()
+    if (u.role !== 'admin') return { ok: false, error: 'Only administrators can install updates' }
+    Audit.log(u.id, null, 'install_update', `Updating from v${app.getVersion()}`)
+    quitAndInstall()
+    return { ok: true }
+  })
 
   // ---------------- Documents ----------------
   ipcMain.handle('doc:open', (_e, path: string) => shell.openPath(path))

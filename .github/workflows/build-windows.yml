@@ -47,6 +47,7 @@ jobs:
           path: |
             release/*/GivingSmiles-*.exe
             release/*/GivingSmiles-*.exe.blockmap
+            release/*/latest.yml
           if-no-files-found: error
 
       - name: Read app version
@@ -63,8 +64,13 @@ jobs:
           body: |
             Giving Smiles — Dental Clinic Management (Windows installer).
 
-            Download **GivingSmiles-Setup-x.y.z.exe** below and run it on each clinic computer.
-            (Windows SmartScreen may warn about an unsigned app — choose *More info → Run anyway*.)
+            **New install:** download **GivingSmiles-Setup.exe** below and run it.
+            **Already installed (v1.2.1 or newer):** no download needed — the app updates itself
+            via *Settings → Software Updates*.
+
+            (Windows SmartScreen may warn about an unsigned app — choose *More info → Run anyway*.
+            `latest.yml` is the auto-update manifest; leave it attached.)
           files: |
             release/*/GivingSmiles-*.exe
             release/*/GivingSmiles-*.exe.blockmap
+            release/*/latest.yml

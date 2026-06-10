@@ -6,15 +6,18 @@ directories:
   buildResources: resources
   output: release/${version}
 
-# electron-vite externalizes the runtime dependencies, so they must ship in the package.
-# These three packages are dependency-free, so including their folders is sufficient.
+# electron-vite externalizes the runtime dependencies; electron-builder copies the
+# production dependency tree from package.json automatically (required for
+# electron-updater, which has transitive dependencies).
 files:
   - out/**/*
   - package.json
-  - '!node_modules/**/*'
-  - node_modules/sql.js/**/*
-  - node_modules/bcryptjs/**/*
-  - node_modules/nodemailer/**/*
+
+# Auto-update feed: electron-updater checks this repo's GitHub Releases for latest.yml.
+publish:
+  provider: github
+  owner: oofski
+  repo: DentalClinicCRM
 
 # The sql.js WebAssembly engine must be a real file on disk (cannot run from inside the asar).
 extraResources:

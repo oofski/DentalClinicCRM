@@ -19,7 +19,8 @@ import type {
   ClinicEvent,
   ReferralTemplate,
   ReferralRequest,
-  KioskServerStatus
+  KioskServerStatus,
+  UpdateStatus
 } from '@shared/types'
 
 interface Ok<T = undefined> {
@@ -104,6 +105,13 @@ export interface Api {
   }
   live: {
     onCheckin(cb: (p: { id: number; name: string; patient_id: string }) => void): () => void
+  }
+  updates: {
+    status(): Promise<UpdateStatus>
+    check(): Promise<UpdateStatus>
+    download(): Promise<UpdateStatus | { ok: boolean; error?: string }>
+    install(): Promise<{ ok: boolean; error?: string }>
+    onStatus(cb: (s: UpdateStatus) => void): () => void
   }
   exams: {
     create(patientId: number, examDate: string): Promise<{ ok: boolean; data: Examination }>

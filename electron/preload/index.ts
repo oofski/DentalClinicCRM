@@ -62,6 +62,17 @@ const api = {
       return () => ipcRenderer.removeListener('live:checkin', listener)
     }
   },
+  updates: {
+    status: () => invoke('updates:status'),
+    check: () => invoke('updates:check'),
+    download: () => invoke('updates:download'),
+    install: () => invoke('updates:install'),
+    onStatus: (cb: (s: unknown) => void) => {
+      const listener = (_e: IpcRendererEvent, payload: unknown) => cb(payload)
+      ipcRenderer.on('updates:status', listener)
+      return () => ipcRenderer.removeListener('updates:status', listener)
+    }
+  },
   exams: {
     create: (patientId: number, examDate: string) => invoke('exams:create', patientId, examDate),
     get: (id: number) => invoke('exams:get', id),

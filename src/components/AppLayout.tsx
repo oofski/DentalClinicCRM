@@ -112,6 +112,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return off
   }, [toast])
 
+  // Tell the admin once when a software update is available.
+  const notifiedVersion = useRef<string | null>(null)
+  useEffect(() => {
+    if (user?.role !== 'admin') return
+    const off = api.updates.onStatus((s) => {
+      if (s.state === 'available' && s.availableVersion && notifiedVersion.current !== s.availableVersion) {
+        notifiedVersion.current = s.availableVersion
+        toast.push(`⬆ Update v${s.availableVersion} is available — Settings → Software Updates`, 'info')
+      }
+    })
+    return off
+  }, [user?.role, toast])
+
   // Inactivity auto-logout (security requirement: 30 min).
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>

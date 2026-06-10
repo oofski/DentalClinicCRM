@@ -8,7 +8,8 @@ import type {
   AuditEntry,
   Role,
   ReferralTemplate,
-  KioskServerStatus
+  KioskServerStatus,
+  UpdateStatus
 } from '@shared/types'
 import { Field, Modal, useToast } from '@/components/ui'
 import { formatDateTime } from '@/lib/format'
@@ -268,6 +269,9 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* Software updates */}
+      {isAdmin && <SoftwareUpdatesSection />}
 
       {/* Audit */}
       {isAdmin && (
@@ -559,6 +563,125 @@ function ReferralTemplatesSection() {
           findings, tooth chart) are added automatically when you create a referral.
         </p>
       </Modal>
+    </div>
+  )
+}
+
+// ---------------- Software Updates ----------------
+function SoftwareUpdatesSection() {
+  const toast = useToast()
+  const [s, setS] = useState<UpdateStatus | null>(null)
+
+  useEffect(() => {
+    api.updates.status().then(setS)
+    const off = api.updates.onStatus(setS)
+    return off
+  }, [])
+
+  if (!s) return null
+  const busy = s.state === 'checking' || s.state === 'downloading'
+
+  return (
+    <div className="card">
+      <div className="card-title">
+        Software Updates
+        <span className="pill gray">v{s.currentVersion}</span>
+      </div>
+      <p className="muted" style={{ marginTop: -6 }}>
+        Updates download from the clinic’s GitHub releases and install in place — no manual
+        re-download needed, and <b>patient data is never touched</b>. Requires internet only while
+        checking/downloading.
+      </p>
+
+      {s.state === 'dev' && (
+        <div className="alert info">Running in development mode — updates are disabled.</div>
+      )}
+
+      {s.state === 'available' && (
+        <div className="alert info">
+          ⬆ <b>Version {s.availableVersion}</b> is available (you have v{s.currentVersion}).
+        </div>
+      )}
+      {s.state === 'not-available' && (
+        <div className="alert success">✓ You’re up to date — v{s.currentVersion} is the latest version.</div>
+      )}
+      {s.state === 'error' && (
+        <div className="alert">
+          Could not check for updates — {s.error || 'no internet connection?'} The app keeps working
+          normally.
+        </div>
+      )}
+      {s.state === 'downloading' && (
+        <div style={{ margin: '6px 0 10px' }}>
+          <div
+            style={{
+              height: 10,
+              borderRadius: 6,
+              background: 'var(--azure-soft)',
+              overflow: 'hidden'
+            }}
+          >
+            <div
+              style={{
+                width: `${s.percent ?? 0}%`,
+                height: '100%',
+                background: 'var(--azure)',
+                transition: 'width .3s ease'
+              }}
+            />
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Downloading v{s.availableVersion}… {s.percent ?? 0}%
+          </div>
+        </div>
+      )}
+      {s.state === 'downloaded' && (
+        <div className="alert success">
+          ✓ Version {s.availableVersion} is downloaded and ready. It will also install automatically
+          the next time the app closes.
+        </div>
+      )}
+
+      <div className="row" style={{ gap: 10 }}>
+        {(s.state === 'idle' || s.state === 'not-available' || s.state === 'error') && (
+          <button className="btn btn-primary" onClick={() => api.updates.check()}>
+            Check for Updates
+          </button>
+        )}
+        {s.state === 'checking' && (
+          <button className="btn" disabled>
+            Checking…
+          </button>
+        )}
+        {s.state === 'available' && (
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              const r = (await api.updates.download()) as { ok?: boolean; error?: string }
+              if (r && r.ok === false) toast.push(r.error || 'Download failed', 'error')
+            }}
+          >
+            ⬇ Download v{s.availableVersion}
+          </button>
+        )}
+        {s.state === 'downloaded' && (
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              toast.push('Installing update — the app will restart…', 'info')
+              const r = await api.updates.install()
+              if (!r.ok) toast.push(r.error || 'Install failed', 'error')
+            }}
+          >
+            🔄 Restart & Install Now
+          </button>
+        )}
+        {busy && s.state === 'downloading' && (
+          <button className="btn" disabled>
+            Downloading…
+          </button>
+        )}
+      </div>
     </div>
   )
 }
