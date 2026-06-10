@@ -99,6 +99,23 @@ export default function Events() {
     setViewPatients(await api.events.listPatients(ev.id))
   }
 
+  const deleteEvent = async (ev: ClinicEvent) => {
+    const n = ev.patient_count ?? 0
+    const msg =
+      n > 0
+        ? `Delete "${ev.name}"?\n\nIts ${n} patient(s) are kept but untagged from this event — their records and files are not affected.\n\nThis cannot be undone.`
+        : `Delete "${ev.name}"? This cannot be undone.`
+    if (!window.confirm(msg)) return
+    const r = await api.events.delete(ev.id)
+    if (r.ok) {
+      toast.push(
+        r.untagged ? `Event deleted — ${r.untagged} patient(s) untagged` : 'Event deleted',
+        'success'
+      )
+      reload()
+    } else toast.push(r.error || 'Failed to delete', 'error')
+  }
+
   const visible = events.filter((e) => showArchived || e.status === 'open')
   const active = events.find((e) => e.id === activeId) || null
 
@@ -216,30 +233,19 @@ export default function Events() {
                               Archive
                             </button>
                           ) : (
-                            <>
-                              <button
-                                className="btn btn-sm btn-ghost"
-                                onClick={async () => {
-                                  await api.events.setStatus(ev.id, 'open')
-                                  reload()
-                                }}
-                              >
-                                Reopen
-                              </button>
-                              <button
-                                className="btn btn-sm btn-danger"
-                                onClick={async () => {
-                                  const r = await api.events.delete(ev.id)
-                                  if (r.ok) {
-                                    toast.push('Event deleted', 'success')
-                                    reload()
-                                  } else toast.push(r.error || 'Cannot delete', 'error')
-                                }}
-                              >
-                                Delete
-                              </button>
-                            </>
+                            <button
+                              className="btn btn-sm btn-ghost"
+                              onClick={async () => {
+                                await api.events.setStatus(ev.id, 'open')
+                                reload()
+                              }}
+                            >
+                              Reopen
+                            </button>
                           )}
+                          <button className="btn btn-sm btn-danger" onClick={() => deleteEvent(ev)}>
+                            Delete
+                          </button>
                         </>
                       )}
                     </div>

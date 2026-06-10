@@ -50,6 +50,10 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 ### New in v1.2.1
 - **Auto-update** — *Settings → Software Updates* (admin) checks this repo's releases, downloads the new version with a progress bar, and installs in place with **Restart & Install** — no more manual re-downloads. A quiet check also runs at startup (offline clinics are unaffected; patient data is never touched by updates).
 
+### New in v1.2.2
+- **Show password** toggle on the sign-in screen.
+- **Delete events** directly (admin) — from the Events page you can now delete an event outright; its patients are kept and simply untagged (records and files untouched), so you're no longer limited to archiving.
+
 ## Sign-in accounts
 
 Three accounts are created automatically on first launch:

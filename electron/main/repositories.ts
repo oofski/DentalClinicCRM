@@ -485,13 +485,13 @@ export const Events = {
   setStatus(id: number, status: 'open' | 'archived'): void {
     execute('UPDATE events SET status = ? WHERE id = ?', [status, id])
   },
-  delete(id: number): { ok: boolean; error?: string } {
+  delete(id: number): { ok: boolean; untagged: number } {
     const c = queryOne<{ c: number }>('SELECT COUNT(*) AS c FROM patients WHERE event_id = ?', [id])
-    if (c && Number(c.c) > 0) {
-      return { ok: false, error: `This event has ${c.c} tagged patient(s). Archive it instead, or untag the patients first.` }
-    }
+    const untagged = c ? Number(c.c) : 0
+    // Patients are kept — only their tag to this event is removed (their records/files are untouched).
+    if (untagged > 0) execute('UPDATE patients SET event_id = NULL WHERE event_id = ?', [id])
     execute('DELETE FROM events WHERE id = ?', [id])
-    return { ok: true }
+    return { ok: true, untagged }
   },
   getById(id: number): ClinicEvent | undefined {
     const r = queryOne(

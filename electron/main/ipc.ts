@@ -420,11 +420,14 @@ export function registerIpc(): void {
   ipcMain.handle('events:delete', (_e, id: number) => {
     const u = requireUser()
     if (u.role !== 'admin') return { ok: false, error: 'Only administrators can delete events' }
+    if (ActiveEvent.getId() === id) ActiveEvent.set(null)
     const res = Events.delete(id)
-    if (res.ok) {
-      if (ActiveEvent.getId() === id) ActiveEvent.set(null)
-      Audit.log(u.id, null, 'delete_event', `Deleted event #${id}`)
-    }
+    Audit.log(
+      u.id,
+      null,
+      'delete_event',
+      `Deleted event #${id}${res.untagged ? ` (untagged ${res.untagged} patient(s))` : ''}`
+    )
     return res
   })
 

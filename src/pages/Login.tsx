@@ -8,6 +8,7 @@ export default function Login() {
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -47,12 +48,36 @@ export default function Login() {
         </div>
         <div className="field" style={{ textAlign: 'left' }}>
           <label>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showPw ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              style={{ paddingRight: 62 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw((v) => !v)}
+              aria-label={showPw ? 'Hide password' : 'Show password'}
+              style={{
+                position: 'absolute',
+                right: 6,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                color: 'var(--azure)',
+                cursor: 'pointer',
+                fontSize: 12.5,
+                fontWeight: 700,
+                width: 'auto',
+                padding: '4px 8px'
+              }}
+            >
+              {showPw ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </div>
 
         {error && (

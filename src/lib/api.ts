@@ -71,7 +71,7 @@ export interface Api {
       args: { name: string; location: string | null; event_date: string | null; notes: string | null }
     ): Promise<{ ok: boolean; error?: string; data?: ClinicEvent }>
     setStatus(id: number, status: 'open' | 'archived'): Promise<{ ok: boolean; error?: string }>
-    delete(id: number): Promise<{ ok: boolean; error?: string }>
+    delete(id: number): Promise<{ ok: boolean; error?: string; untagged?: number }>
     setActive(id: number | null): Promise<{ ok: boolean; data?: ClinicEvent | null }>
     getActive(): Promise<ClinicEvent | null>
     listPatients(id: number): Promise<Patient[]>

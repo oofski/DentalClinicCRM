@@ -1,6 +1,7 @@
 // Loads the built renderer in a hidden window and reports any console errors / crashes.
 const { app, BrowserWindow } = require('electron')
 const path = require('path')
+const fs = require('fs')
 
 const errors = []
 app.whenReady().then(async () => {
@@ -25,6 +26,11 @@ app.whenReady().then(async () => {
     await win.loadFile(path.join(process.cwd(), 'out/renderer/index.html'), { hash: route })
   }
   await new Promise((r) => setTimeout(r, 2500))
+
+  if (process.env.SMOKE_SHOT) {
+    const img = await win.webContents.capturePage()
+    fs.writeFileSync(process.env.SMOKE_SHOT, img.toPNG())
+  }
 
   console.log('RENDERER_ERRORS:', errors.length)
   errors.slice(0, 20).forEach((e) => console.log(' -', e))

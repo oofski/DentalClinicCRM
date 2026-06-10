@@ -14,8 +14,13 @@ export const useAuth = create<AuthState>((set) => ({
   user: null,
   ready: false,
   init: async () => {
-    const user = await api.auth.current()
-    set({ user, ready: true })
+    try {
+      const user = await api.auth.current()
+      set({ user, ready: true })
+    } catch {
+      // Never hang on the splash screen if the session check fails.
+      set({ user: null, ready: true })
+    }
   },
   login: async (username, password) => {
     const res = await api.auth.login(username, password)
