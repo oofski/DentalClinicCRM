@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import QRCode from 'qrcode'
 import { api } from '@/lib/api'
 import { useAuth } from '@/store/auth'
-import type { ClinicSettings, User, AuditEntry, Role } from '@shared/types'
+import type {
+  ClinicSettings,
+  User,
+  AuditEntry,
+  Role,
+  ReferralTemplate,
+  KioskServerStatus
+} from '@shared/types'
 import { Field, Modal, useToast } from '@/components/ui'
 import { formatDateTime } from '@/lib/format'
 import { Icon } from '@/components/icons'
@@ -71,10 +79,18 @@ export default function Settings() {
     } else toast.push(res.error || 'Failed', 'error')
   }
 
+  const canRefer = me?.role === 'admin' || me?.role === 'doctor'
+
   return (
     <div className="stack">
       <h1>Settings</h1>
-      {!isAdmin && <div className="alert info">You can change your own password here. Clinic settings and user management require an administrator.</div>}
+      {!isAdmin && (
+        <div className="alert info">
+          {canRefer
+            ? 'You can manage referral templates, run the tablet check-in, and change your password here. Clinic configuration requires an administrator.'
+            : 'You can run the tablet check-in and change your password here. Clinic configuration requires an administrator.'}
+        </div>
+      )}
 
       {/* Clinic info */}
       <div className="card">
@@ -154,6 +170,12 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* Referral templates (admin + doctor) */}
+      {canRefer && <ReferralTemplatesSection />}
+
+      {/* Tablet check-in server (any signed-in role) */}
+      <TabletCheckinSection />
 
       {/* Users */}
       {isAdmin && (
@@ -342,5 +364,300 @@ function AddUserModal({
         </Field>
       </div>
     </Modal>
+  )
+}
+
+// ---------------- Referral Templates ----------------
+const emptyTemplate = {
+  name: '',
+  specialty: '',
+  clinic_name: '',
+  clinic_address: '',
+  clinic_phone: '',
+  clinic_email: '',
+  body: ''
+}
+
+function ReferralTemplatesSection() {
+  const toast = useToast()
+  const [list, setList] = useState<ReferralTemplate[]>([])
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<ReferralTemplate | null>(null)
+  const [form, setForm] = useState({ ...emptyTemplate })
+
+  const reload = useCallback(() => {
+    api.reftpl.list().then(setList)
+  }, [])
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const openNew = () => {
+    setEditing(null)
+    setForm({ ...emptyTemplate })
+    setOpen(true)
+  }
+  const openEdit = (t: ReferralTemplate) => {
+    setEditing(t)
+    setForm({
+      name: t.name,
+      specialty: t.specialty ?? '',
+      clinic_name: t.clinic_name,
+      clinic_address: t.clinic_address ?? '',
+      clinic_phone: t.clinic_phone ?? '',
+      clinic_email: t.clinic_email ?? '',
+      body: t.body
+    })
+    setOpen(true)
+  }
+
+  const save = async () => {
+    if (!form.name.trim() || !form.clinic_name.trim()) {
+      toast.push('Template name and receiving clinic name are required', 'error')
+      return
+    }
+    const payload = {
+      name: form.name.trim(),
+      specialty: form.specialty.trim() || null,
+      clinic_name: form.clinic_name.trim(),
+      clinic_address: form.clinic_address.trim() || null,
+      clinic_phone: form.clinic_phone.trim() || null,
+      clinic_email: form.clinic_email.trim() || null,
+      body: form.body
+    }
+    const res = editing
+      ? await api.reftpl.update(editing.id, payload)
+      : await api.reftpl.create(payload)
+    if (res.ok) {
+      toast.push(editing ? 'Template updated' : 'Template created', 'success')
+      setOpen(false)
+      reload()
+    } else toast.push(res.error || 'Failed', 'error')
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title">
+        Referral Templates
+        <button className="btn btn-sm btn-primary" onClick={openNew}>
+          <Icon name="plus" size={14} /> New Template
+        </button>
+      </div>
+      <p className="muted" style={{ marginTop: -6 }}>
+        Create reusable referral letters for the specialists/clinics you refer to. Use them from any
+        patient’s record via the <b>Referral</b> button — print or email alongside the report.
+      </p>
+      {list.length === 0 ? (
+        <div className="empty">No templates yet.</div>
+      ) : (
+        <table className="data">
+          <thead>
+            <tr>
+              <th>Template</th>
+              <th>Receiving Clinic</th>
+              <th>Specialty</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((t) => (
+              <tr key={t.id}>
+                <td style={{ fontWeight: 600 }}>{t.name}</td>
+                <td>{t.clinic_name}</td>
+                <td>{t.specialty || '—'}</td>
+                <td>
+                  <div className="row" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                    <button className="btn btn-sm" onClick={() => openEdit(t)}>
+                      <Icon name="edit" size={14} />
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={async () => {
+                        await api.reftpl.delete(t.id)
+                        toast.push('Template deleted', 'success')
+                        reload()
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <Modal
+        open={open}
+        title={editing ? 'Edit Referral Template' : 'New Referral Template'}
+        onClose={() => setOpen(false)}
+        wide
+        footer={
+          <>
+            <button className="btn" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" onClick={save}>
+              {editing ? 'Save Changes' : 'Create Template'}
+            </button>
+          </>
+        }
+      >
+        <div className="grid-2">
+          <Field label="Template Name" required>
+            <input
+              placeholder="e.g. Oral Surgery — Dr. Patel"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </Field>
+          <Field label="Specialty">
+            <input
+              placeholder="e.g. Endodontics"
+              value={form.specialty}
+              onChange={(e) => setForm({ ...form, specialty: e.target.value })}
+            />
+          </Field>
+        </div>
+        <Field label="Receiving Clinic Name" required>
+          <input
+            value={form.clinic_name}
+            onChange={(e) => setForm({ ...form, clinic_name: e.target.value })}
+          />
+        </Field>
+        <Field label="Receiving Clinic Address">
+          <input
+            value={form.clinic_address}
+            onChange={(e) => setForm({ ...form, clinic_address: e.target.value })}
+          />
+        </Field>
+        <div className="grid-2">
+          <Field label="Receiving Clinic Phone">
+            <input
+              value={form.clinic_phone}
+              onChange={(e) => setForm({ ...form, clinic_phone: e.target.value })}
+            />
+          </Field>
+          <Field label="Receiving Clinic Email">
+            <input
+              placeholder="for one-click emailing"
+              value={form.clinic_email}
+              onChange={(e) => setForm({ ...form, clinic_email: e.target.value })}
+            />
+          </Field>
+        </div>
+        <Field label="Letter Body">
+          <textarea
+            style={{ minHeight: 140 }}
+            value={form.body}
+            onChange={(e) => setForm({ ...form, body: e.target.value })}
+          />
+        </Field>
+        <p className="muted" style={{ fontSize: 12 }}>
+          Patient name/DOB/contact, the reason you type, and any options you tick (medical alerts,
+          findings, tooth chart) are added automatically when you create a referral.
+        </p>
+      </Modal>
+    </div>
+  )
+}
+
+// ---------------- Tablet Check-In Server ----------------
+function TabletCheckinSection() {
+  const toast = useToast()
+  const [status, setStatus] = useState<KioskServerStatus>({ running: false, urls: [], port: null })
+  const [qr, setQr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.kioskServer.status().then(setStatus)
+  }, [])
+
+  useEffect(() => {
+    const url = status.urls[0]
+    if (status.running && url) {
+      QRCode.toDataURL(url, { width: 220, margin: 1 }).then(setQr).catch(() => setQr(null))
+    } else {
+      setQr(null)
+    }
+  }, [status])
+
+  const start = async () => {
+    setBusy(true)
+    const res = await api.kioskServer.start()
+    setBusy(false)
+    if (res.ok && res.status) {
+      setStatus(res.status)
+      if (res.status.urls.length === 0)
+        toast.push('Server started, but no local network was detected. Connect to wifi or a hotspot.', 'info')
+      else toast.push('Tablet check-in is live on your local network', 'success')
+    } else toast.push(res.error || 'Could not start the server', 'error')
+  }
+  const stop = async () => {
+    const res = await api.kioskServer.stop()
+    if (res.status) setStatus(res.status)
+    toast.push('Tablet check-in stopped', 'info')
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title">
+        Tablet Check-In (local network)
+        {status.running ? (
+          <button className="btn btn-sm btn-danger" onClick={stop}>
+            Stop
+          </button>
+        ) : (
+          <button className="btn btn-sm btn-primary" disabled={busy} onClick={start}>
+            {busy ? 'Starting…' : 'Start'}
+          </button>
+        )}
+      </div>
+      <p className="muted" style={{ marginTop: -6 }}>
+        Lets a patient check in on a tablet/phone’s browser. The device just needs to be on the{' '}
+        <b>same wifi or hotspot</b> as this computer — <b>no internet required</b>. When the patient
+        finishes, they appear here instantly with a signed consent, tagged to the active event.
+      </p>
+
+      {status.running ? (
+        status.urls.length === 0 ? (
+          <div className="alert">
+            Running, but this computer isn’t on a network yet. Connect to the clinic wifi (or turn on a
+            Windows Mobile hotspot), then click Stop and Start again.
+          </div>
+        ) : (
+          <div className="row wrap" style={{ gap: 24, alignItems: 'center' }}>
+            {qr && (
+              <div style={{ textAlign: 'center' }}>
+                <img src={qr} alt="QR code" style={{ width: 180, height: 180 }} />
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Scan with the tablet camera
+                </div>
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Or open this link on the tablet:</div>
+              {status.urls.map((u) => (
+                <div
+                  key={u}
+                  className="pill azure"
+                  style={{ display: 'block', marginBottom: 6, fontSize: 13, padding: '8px 12px' }}
+                >
+                  {u}
+                </div>
+              ))}
+              <div className="alert success" style={{ marginTop: 8 }}>
+                ✓ Live — new check-ins pop up automatically across the app.
+              </div>
+            </div>
+          </div>
+        )
+      ) : (
+        <div className="alert info">
+          Not running. Click <b>Start</b>, then on the tablet open the link shown (or scan the QR code).
+        </div>
+      )}
+    </div>
   )
 }

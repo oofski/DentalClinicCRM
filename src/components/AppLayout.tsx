@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/store/auth'
 import { api } from '@/lib/api'
-import type { Patient } from '@shared/types'
+import type { Patient, ClinicEvent } from '@shared/types'
 import { LogoPlate } from './Logo'
 import { Icon } from './icons'
 import { useToast } from './ui'
@@ -93,10 +93,24 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const toast = useToast()
   const [version, setVersion] = useState('')
+  const [activeEvent, setActiveEvent] = useState<ClinicEvent | null>(null)
 
   useEffect(() => {
     api.app.info().then((i) => setVersion(i.version))
   }, [])
+
+  // Refresh the active-event banner whenever the user navigates.
+  useEffect(() => {
+    api.events.getActive().then(setActiveEvent)
+  }, [location.pathname])
+
+  // Live toast when a patient checks in from a tablet on the local network.
+  useEffect(() => {
+    const off = api.live.onCheckin((p) => {
+      toast.push(`✅ ${p.name} just checked in from the tablet (${p.patient_id})`, 'success')
+    })
+    return off
+  }, [toast])
 
   // Inactivity auto-logout (security requirement: 30 min).
   useEffect(() => {
@@ -138,7 +152,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
         {navItem('/', 'home', 'Dashboard')}
         {navItem('/patients', 'users', 'Patients')}
-        {user?.role === 'admin' && navItem('/settings', 'settings', 'Settings')}
+        {navItem('/events', 'doc', 'Events')}
+        {navItem('/settings', 'settings', 'Settings')}
 
         <div style={{ marginTop: 14 }}>
           <button
@@ -184,6 +199,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <div className="topbar">
           <GlobalSearch />
           <div className="row" style={{ gap: 10 }}>
+            {activeEvent && (
+              <span
+                className="pill azure clickable"
+                title="Active event — new patients are tagged to it. Click to manage."
+                onClick={() => navigate('/events')}
+              >
+                📍 {activeEvent.name}
+              </span>
+            )}
             <button className="btn btn-primary" onClick={() => navigate('/patients/new')}>
               <Icon name="plus" size={16} /> New Patient
             </button>

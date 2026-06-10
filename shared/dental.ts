@@ -74,7 +74,8 @@ export const CONDITIONS: ConditionMeta[] = [
   { key: 'filled', label: 'Filled', color: '#3B82C4', description: 'Filled / Restored' },
   { key: 'missing', label: 'Missing', color: '#9AA7B2', description: 'Missing tooth' },
   { key: 'implant', label: 'Implant', color: '#E8893B', description: 'Implant' },
-  { key: 'treatment', label: 'Needs Treatment', color: '#E0524A', description: 'Needs treatment / problem area' }
+  { key: 'treatment', label: 'Needs Treatment', color: '#E0524A', description: 'Needs treatment / problem area' },
+  { key: 'extraction', label: 'Extraction', color: '#9B59B6', description: 'Extraction required / planned' }
 ]
 
 export const CONDITION_COLORS: Record<ToothConditionKey, string> = CONDITIONS.reduce(

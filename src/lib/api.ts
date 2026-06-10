@@ -15,7 +15,11 @@ import type {
   Role,
   Language,
   NoteType,
-  ToothChartData
+  ToothChartData,
+  ClinicEvent,
+  ReferralTemplate,
+  ReferralRequest,
+  KioskServerStatus
 } from '@shared/types'
 
 interface Ok<T = undefined> {
@@ -51,6 +55,55 @@ export interface Api {
     fullRecord(id: number): Promise<PatientFullRecord | null>
     printSummary(id: number): Promise<{ ok: boolean; error?: string }>
     delete(id: number): Promise<{ ok: boolean; error?: string }>
+    setEvent(id: number, eventId: number | null): Promise<{ ok: boolean; data?: Patient }>
+  }
+  events: {
+    list(): Promise<ClinicEvent[]>
+    create(args: {
+      name: string
+      location: string | null
+      event_date: string | null
+      notes: string | null
+    }): Promise<{ ok: boolean; error?: string; data?: ClinicEvent }>
+    update(
+      id: number,
+      args: { name: string; location: string | null; event_date: string | null; notes: string | null }
+    ): Promise<{ ok: boolean; error?: string; data?: ClinicEvent }>
+    setStatus(id: number, status: 'open' | 'archived'): Promise<{ ok: boolean; error?: string }>
+    delete(id: number): Promise<{ ok: boolean; error?: string }>
+    setActive(id: number | null): Promise<{ ok: boolean; data?: ClinicEvent | null }>
+    getActive(): Promise<ClinicEvent | null>
+    listPatients(id: number): Promise<Patient[]>
+    export(id: number): Promise<{ ok: boolean; error?: string; path?: string; count?: number }>
+  }
+  reftpl: {
+    list(): Promise<ReferralTemplate[]>
+    create(
+      t: Omit<ReferralTemplate, 'id' | 'created_at' | 'updated_at'>
+    ): Promise<{ ok: boolean; error?: string; data?: ReferralTemplate }>
+    update(
+      id: number,
+      t: Omit<ReferralTemplate, 'id' | 'created_at' | 'updated_at'>
+    ): Promise<{ ok: boolean; error?: string; data?: ReferralTemplate }>
+    delete(id: number): Promise<{ ok: boolean; error?: string }>
+  }
+  referral: {
+    generate(args: ReferralRequest): Promise<{
+      ok: boolean
+      error?: string
+      pdfPath?: string
+      referralId?: number
+      suggestedEmail?: string
+    }>
+    print(args: ReferralRequest): Promise<{ ok: boolean; error?: string }>
+  }
+  kioskServer: {
+    start(): Promise<{ ok: boolean; error?: string; status?: KioskServerStatus }>
+    stop(): Promise<{ ok: boolean; status?: KioskServerStatus }>
+    status(): Promise<KioskServerStatus>
+  }
+  live: {
+    onCheckin(cb: (p: { id: number; name: string; patient_id: string }) => void): () => void
   }
   exams: {
     create(patientId: number, examDate: string): Promise<{ ok: boolean; data: Examination }>
@@ -106,6 +159,12 @@ export interface Api {
   doc: {
     open(path: string): Promise<string>
     reveal(path: string): Promise<Ok<boolean>>
+    email(args: {
+      pdfPath: string
+      to: string
+      subject: string
+      text: string
+    }): Promise<{ ok: boolean; method: string; error?: string }>
   }
   images: {
     pick(): Promise<string[]>

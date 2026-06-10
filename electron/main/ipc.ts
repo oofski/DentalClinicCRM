@@ -10,7 +10,11 @@ import {
   Reports,
   Images,
   Settings,
-  Audit
+  Audit,
+  Events,
+  ActiveEvent,
+  ReferralTemplates,
+  Referrals
 } from './repositories'
 import { exportDatabase, getDbPath, dataDir } from './db'
 import { verifyLogin, changePassword, hashPassword } from './auth'
@@ -19,8 +23,20 @@ import { renderHtmlToPdf, printHtml } from './pdf'
 import { buildConsentHtml } from './templates/consent'
 import { buildReportHtml } from './templates/report'
 import { buildSummaryHtml } from './templates/summary'
+import { buildReferralHtml } from './templates/referral'
 import { emailPdf } from './email'
-import type { User, PatientInput, Language, NoteType, TreatmentItem, Role } from '@shared/types'
+import { startKioskServer, stopKioskServer, kioskServerStatus } from './kioskServer'
+import { join } from 'node:path'
+import type {
+  User,
+  PatientInput,
+  Language,
+  NoteType,
+  TreatmentItem,
+  Role,
+  ReferralTemplate,
+  ReferralRequest
+} from '@shared/types'
 
 let currentUser: User | null = null
 
@@ -90,9 +106,22 @@ export function registerIpc(): void {
   // ---------------- Patients ----------------
   ipcMain.handle('patients:create', (_e, input: PatientInput) => {
     const u = requireUser()
-    const patient = Patients.create(input)
-    Audit.log(u.id, patient.id, 'create_patient', `Created ${patient.patient_id}`)
+    // New patients are auto-tagged to the active event (if one is set).
+    const patient = Patients.create(input, ActiveEvent.getId())
+    Audit.log(
+      u.id,
+      patient.id,
+      'create_patient',
+      `Created ${patient.patient_id}${patient.event_name ? ` (event: ${patient.event_name})` : ''}`
+    )
     return ok(patient)
+  })
+
+  ipcMain.handle('patients:setEvent', (_e, patientId: number, eventId: number | null) => {
+    const u = requireUser()
+    Patients.setEvent(patientId, eventId)
+    Audit.log(u.id, patientId, 'set_event', eventId ? `Tagged to event #${eventId}` : 'Untagged from event')
+    return ok(Patients.getById(patientId))
   })
 
   ipcMain.handle('patients:update', (_e, id: number, input: PatientInput) => {
@@ -121,6 +150,7 @@ export function registerIpc(): void {
       exams: Examinations.listByPatient(id),
       consents: Consents.listByPatient(id),
       reports: Reports.listByPatient(id),
+      referrals: Referrals.listByPatient(id),
       images
     }
   })
@@ -347,6 +377,237 @@ export function registerIpc(): void {
       return res
     }
   )
+
+  // ---------------- Events ----------------
+  ipcMain.handle('events:list', () => {
+    requireUser()
+    return Events.list()
+  })
+
+  ipcMain.handle(
+    'events:create',
+    (_e, args: { name: string; location: string | null; event_date: string | null; notes: string | null }) => {
+      const u = requireUser()
+      if (u.role !== 'admin') return { ok: false, error: 'Only administrators can create events' }
+      if (!args.name?.trim()) return { ok: false, error: 'Event name is required' }
+      const id = Events.create(args.name.trim(), args.location, args.event_date, args.notes)
+      Audit.log(u.id, null, 'create_event', `Created event "${args.name.trim()}"`)
+      return ok(Events.getById(id))
+    }
+  )
+
+  ipcMain.handle(
+    'events:update',
+    (_e, id: number, args: { name: string; location: string | null; event_date: string | null; notes: string | null }) => {
+      const u = requireUser()
+      if (u.role !== 'admin') return { ok: false, error: 'Only administrators can edit events' }
+      Events.update(id, args)
+      Audit.log(u.id, null, 'edit_event', `Updated event #${id}`)
+      return ok(Events.getById(id))
+    }
+  )
+
+  ipcMain.handle('events:setStatus', (_e, id: number, status: 'open' | 'archived') => {
+    const u = requireUser()
+    if (u.role !== 'admin') return { ok: false, error: 'Only administrators can archive events' }
+    Events.setStatus(id, status)
+    if (status === 'archived' && ActiveEvent.getId() === id) ActiveEvent.set(null)
+    Audit.log(u.id, null, 'event_status', `Event #${id} → ${status}`)
+    return ok(true)
+  })
+
+  ipcMain.handle('events:delete', (_e, id: number) => {
+    const u = requireUser()
+    if (u.role !== 'admin') return { ok: false, error: 'Only administrators can delete events' }
+    const res = Events.delete(id)
+    if (res.ok) {
+      if (ActiveEvent.getId() === id) ActiveEvent.set(null)
+      Audit.log(u.id, null, 'delete_event', `Deleted event #${id}`)
+    }
+    return res
+  })
+
+  // Activating an event is an operational action — any signed-in role may do it.
+  ipcMain.handle('events:setActive', (_e, id: number | null) => {
+    const u = requireUser()
+    ActiveEvent.set(id)
+    Audit.log(u.id, null, 'set_active_event', id ? `Activated event #${id}` : 'Deactivated event')
+    return ok(ActiveEvent.get())
+  })
+
+  ipcMain.handle('events:getActive', () => ActiveEvent.get())
+
+  ipcMain.handle('events:listPatients', (_e, id: number) => {
+    requireUser()
+    return Patients.listByEvent(id)
+  })
+
+  ipcMain.handle('events:export', async (_e, id: number) => {
+    const u = requireUser()
+    const ev = Events.getById(id)
+    if (!ev) return { ok: false, error: 'Event not found' }
+    const picked = await dialog.showOpenDialog({
+      title: 'Choose where to save the event folder',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (picked.canceled || !picked.filePaths[0]) return { ok: false, error: 'Cancelled' }
+    const safe = (s: string) => s.replace(/[^a-z0-9 _\-.]/gi, '_').trim()
+    const dest = join(
+      picked.filePaths[0],
+      `${safe(ev.name)}${ev.event_date ? ` - ${safe(ev.event_date)}` : ''}`
+    )
+    fs.mkdirSync(dest, { recursive: true })
+
+    const csv = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const rows = [
+      ['Patient ID', 'First Name', 'Last Name', 'Date of Birth', 'Phone', 'Email', 'Allergies', 'Medical Conditions']
+        .map(csv)
+        .join(',')
+    ]
+    const patients = Patients.listByEvent(id)
+    for (const p of patients) {
+      const src = patientDirs(p.patient_id).base
+      fs.cpSync(src, join(dest, `${p.patient_id} - ${safe(`${p.first_name} ${p.last_name}`)}`), {
+        recursive: true
+      })
+      rows.push(
+        [p.patient_id, p.first_name, p.last_name, p.date_of_birth, p.phone, p.email, p.allergies, p.medical_conditions]
+          .map(csv)
+          .join(',')
+      )
+    }
+    // UTF-8 BOM so Excel opens the roster with correct characters.
+    fs.writeFileSync(join(dest, 'patient-roster.csv'), '\uFEFF' + rows.join('\r\n'))
+    shell.showItemInFolder(dest)
+    Audit.log(u.id, null, 'event_export', `"${ev.name}" → ${dest} (${patients.length} patients)`)
+    return { ok: true, path: dest, count: patients.length }
+  })
+
+  // ---------------- Referral templates ----------------
+  const canRefer = (u: User) => u.role === 'admin' || u.role === 'doctor'
+
+  ipcMain.handle('reftpl:list', () => {
+    requireUser()
+    return ReferralTemplates.list()
+  })
+
+  ipcMain.handle(
+    'reftpl:create',
+    (_e, t: Omit<ReferralTemplate, 'id' | 'created_at' | 'updated_at'>) => {
+      const u = requireUser()
+      if (!canRefer(u)) return { ok: false, error: 'Only doctors and administrators can manage templates' }
+      if (!t.name?.trim() || !t.clinic_name?.trim())
+        return { ok: false, error: 'Template name and receiving clinic name are required' }
+      const id = ReferralTemplates.create(t)
+      Audit.log(u.id, null, 'create_ref_template', `"${t.name}"`)
+      return ok(ReferralTemplates.getById(id))
+    }
+  )
+
+  ipcMain.handle(
+    'reftpl:update',
+    (_e, id: number, t: Omit<ReferralTemplate, 'id' | 'created_at' | 'updated_at'>) => {
+      const u = requireUser()
+      if (!canRefer(u)) return { ok: false, error: 'Only doctors and administrators can manage templates' }
+      ReferralTemplates.update(id, t)
+      Audit.log(u.id, null, 'edit_ref_template', `#${id}`)
+      return ok(ReferralTemplates.getById(id))
+    }
+  )
+
+  ipcMain.handle('reftpl:delete', (_e, id: number) => {
+    const u = requireUser()
+    if (!canRefer(u)) return { ok: false, error: 'Only doctors and administrators can manage templates' }
+    ReferralTemplates.delete(id)
+    Audit.log(u.id, null, 'delete_ref_template', `#${id}`)
+    return ok(true)
+  })
+
+  // ---------------- Referrals ----------------
+  function buildReferralForRequest(args: ReferralRequest, doctorName: string) {
+    const patient = Patients.getById(args.patientId)
+    if (!patient) return { error: 'Patient not found' as const }
+    const template = ReferralTemplates.getById(args.templateId)
+    if (!template) return { error: 'Referral template not found' as const }
+    const latestExam = Examinations.listByPatient(patient.id)[0] ?? null
+    const findingNotes = latestExam
+      ? Notes.listByExam(latestExam.id).filter(
+          (n) => n.note_type === 'finding' || n.note_type === 'observation'
+        )
+      : []
+    const html = buildReferralHtml({
+      clinic: Settings.getAll(),
+      patient,
+      template,
+      doctorName,
+      reason: args.reason || '',
+      urgency: args.urgency === 'urgent' ? 'urgent' : 'routine',
+      extraNotes: args.extraNotes || '',
+      includeAlerts: !!args.includeAlerts,
+      includeFindings: !!args.includeFindings,
+      includeToothChart: !!args.includeToothChart,
+      latestExam,
+      findingNotes
+    })
+    return { html, patient, template }
+  }
+
+  ipcMain.handle('referral:generate', async (_e, args: ReferralRequest) => {
+    const u = requireUser()
+    if (!canRefer(u)) return { ok: false, error: 'Only doctors and administrators can create referrals' }
+    const built = buildReferralForRequest(args, u.full_name)
+    if ('error' in built) return { ok: false, error: built.error }
+    const pdf = await renderHtmlToPdf(built.html)
+    const dirs = patientDirs(built.patient.patient_id)
+    const path = writeFileBuffer(dirs.referrals, timestampName('Referral', 'pdf'), pdf)
+    const id = Referrals.create(built.patient.id, built.template.id, u.id, path)
+    Audit.log(u.id, built.patient.id, 'create_referral', `Referral #${id} → ${built.template.clinic_name}`)
+    return {
+      ok: true,
+      pdfPath: path,
+      referralId: id,
+      suggestedEmail: built.template.clinic_email || ''
+    }
+  })
+
+  ipcMain.handle('referral:print', async (_e, args: ReferralRequest) => {
+    const u = requireUser()
+    if (!canRefer(u)) return { ok: false, error: 'Only doctors and administrators can print referrals' }
+    const built = buildReferralForRequest(args, u.full_name)
+    if ('error' in built) return { ok: false, error: built.error }
+    return printHtml(built.html)
+  })
+
+  // ---------------- Generic document email ----------------
+  ipcMain.handle(
+    'doc:email',
+    async (_e, args: { pdfPath: string; to: string; subject: string; text: string }) => {
+      const u = requireUser()
+      const res = await emailPdf({
+        to: args.to,
+        subject: args.subject,
+        text: args.text,
+        attachmentPath: args.pdfPath
+      })
+      Audit.log(u.id, null, 'email_document', `via ${res.method}`)
+      return res
+    }
+  )
+
+  // ---------------- Tablet check-in server ----------------
+  ipcMain.handle('kioskserver:start', async () => {
+    requireUser()
+    try {
+      return { ok: true, status: await startKioskServer() }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Failed to start server' }
+    }
+  })
+  ipcMain.handle('kioskserver:stop', () => {
+    requireUser()
+    return { ok: true, status: stopKioskServer() }
+  })
+  ipcMain.handle('kioskserver:status', () => kioskServerStatus())
 
   // ---------------- Documents ----------------
   ipcMain.handle('doc:open', (_e, path: string) => shell.openPath(path))

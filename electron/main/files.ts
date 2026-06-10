@@ -10,6 +10,7 @@ export interface PatientDirs {
   base: string
   consents: string
   reports: string
+  referrals: string
   images: string
 }
 
@@ -19,9 +20,10 @@ export function patientDirs(patientCode: string): PatientDirs {
     base,
     consents: join(base, 'Consents'),
     reports: join(base, 'Reports'),
+    referrals: join(base, 'Referrals'),
     images: join(base, 'Images')
   }
-  for (const d of [dirs.base, dirs.consents, dirs.reports, dirs.images]) {
+  for (const d of [dirs.base, dirs.consents, dirs.reports, dirs.referrals, dirs.images]) {
     if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true })
   }
   return dirs

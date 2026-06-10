@@ -76,7 +76,8 @@ export const REPORT_STRINGS: Record<Language, ReportStrings> = {
       filled: 'Filled',
       missing: 'Missing',
       implant: 'Implant',
-      treatment: 'Needs Treatment'
+      treatment: 'Needs Treatment',
+      extraction: 'Extraction'
     },
     clinicalNotes: 'Clinical Notes',
     noteTypes: {
@@ -133,7 +134,8 @@ export const REPORT_STRINGS: Record<Language, ReportStrings> = {
       filled: 'Empastado',
       missing: 'Ausente',
       implant: 'Implante',
-      treatment: 'Necesita Tratamiento'
+      treatment: 'Necesita Tratamiento',
+      extraction: 'Extracción'
     },
     clinicalNotes: 'Notas Clínicas',
     noteTypes: {
@@ -190,7 +192,8 @@ export const REPORT_STRINGS: Record<Language, ReportStrings> = {
       filled: 'محشو',
       missing: 'مفقود',
       implant: 'زرعة',
-      treatment: 'يحتاج علاج'
+      treatment: 'يحتاج علاج',
+      extraction: 'خلع'
     },
     clinicalNotes: 'الملاحظات السريرية',
     noteTypes: {

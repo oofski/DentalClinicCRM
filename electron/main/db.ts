@@ -33,8 +33,21 @@ export async function initDatabase(): Promise<void> {
 
   db.run('PRAGMA foreign_keys = ON;')
   createSchema()
+  migrate()
   seedDefaults()
   persist()
+}
+
+// Adds columns introduced after v1.0 without disturbing existing installed databases.
+function migrate(): void {
+  ensureColumn('patients', 'event_id', 'event_id INTEGER REFERENCES events(id)')
+}
+
+function ensureColumn(table: string, column: string, ddl: string): void {
+  const cols = query<{ name: string }>(`PRAGMA table_info(${table})`)
+  if (!cols.some((c) => c.name === column)) {
+    db.run(`ALTER TABLE ${table} ADD COLUMN ${ddl}`)
+  }
 }
 
 function createSchema(): void {
@@ -145,6 +158,41 @@ function createSchema(): void {
       key TEXT PRIMARY KEY,
       value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      location TEXT,
+      event_date TEXT,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS referral_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      specialty TEXT,
+      clinic_name TEXT NOT NULL DEFAULT '',
+      clinic_address TEXT,
+      clinic_phone TEXT,
+      clinic_email TEXT,
+      body TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS referrals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id INTEGER NOT NULL,
+      template_id INTEGER,
+      doctor_id INTEGER NOT NULL,
+      pdf_path TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (patient_id) REFERENCES patients(id),
+      FOREIGN KEY (template_id) REFERENCES referral_templates(id),
+      FOREIGN KEY (doctor_id) REFERENCES users(id)
+    );
   `)
 }
 
@@ -169,6 +217,23 @@ function seedDefaults(): void {
     }
   }
 
+  const tpl = queryOne<{ c: number }>('SELECT COUNT(*) AS c FROM referral_templates')
+  if (!tpl || tpl.c === 0) {
+    db.run(
+      `INSERT INTO referral_templates (name, specialty, clinic_name, clinic_address, clinic_phone, clinic_email, body)
+       VALUES (?,?,?,?,?,?,?)`,
+      [
+        'Standard Referral',
+        '',
+        'Receiving Clinic',
+        '',
+        '',
+        '',
+        'Dear Colleague,\n\nI am referring the above patient to your office for evaluation and treatment. The relevant clinical information is included in this letter.\n\nPlease contact our office if you require any additional records or have any questions.\n\nThank you for your care of this patient.'
+      ]
+    )
+  }
+
   const defaults: Record<string, string> = {
     clinic_name: 'Giving Smiles',
     address: '123 Wellness Avenue, Suite 200, Your City, ST 00000',
@@ -176,6 +241,7 @@ function seedDefaults(): void {
     license_number: 'LIC-000000',
     email: 'hello@givingsmiles.example',
     default_language: 'english',
+    active_event_id: '',
     smtp_host: '',
     smtp_port: '587',
     smtp_secure: 'false',

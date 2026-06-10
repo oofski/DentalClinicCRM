@@ -1,9 +1,11 @@
 // Development self-test: generates real consent + treatment-report PDFs through the
 // production code paths. Triggered with GS_SELFTEST=1. Not used in normal operation.
 import fs from 'node:fs'
-import { Users, Patients, Examinations, Notes, Settings } from './repositories'
+import { Users, Patients, Examinations, Notes, Settings, ReferralTemplates } from './repositories'
 import { buildConsentHtml } from './templates/consent'
 import { buildReportHtml } from './templates/report'
+import { buildReferralHtml } from './templates/referral'
+import { startKioskServer, stopKioskServer } from './kioskServer'
 import { renderHtmlToPdf } from './pdf'
 import type { ToothChartData, TreatmentItem, Language } from '@shared/types'
 
@@ -26,12 +28,14 @@ export async function runSelfTest(outDir: string): Promise<void> {
     dental_history: 'Two composite fillings (2019)',
     insurance_info: 'DeltaDental #44219',
     referring_doctor: 'Dr. Ng',
-    preferred_language: 'english'
+    preferred_language: 'english',
+    event_id: null
   })
 
   const chart: ToothChartData = {
     3: { condition: 'cavity', surfaces: ['occlusal', 'distal'], note: 'Distal decay' },
     14: { condition: 'filled', surfaces: ['mesial'], note: '' },
+    18: { condition: 'extraction', surfaces: [], note: 'Non-restorable — extract' },
     19: { condition: 'treatment', surfaces: [], note: 'RCT needed' },
     30: { condition: 'missing', surfaces: [], note: '' },
     8: { condition: 'healthy', surfaces: [], note: '' },
@@ -83,5 +87,41 @@ export async function runSelfTest(outDir: string): Promise<void> {
     fs.writeFileSync(`${outDir}/selftest-consent-${lang}.pdf`, pdf)
     console.log(`SELFTEST consent-${lang} bytes =`, pdf.length)
   }
+
+  // Referral letter (uses the seeded default template)
+  const tpl = ReferralTemplates.list()[0]
+  const referralHtml = buildReferralHtml({
+    clinic,
+    patient,
+    template: { ...tpl, clinic_name: 'City Oral Surgery', specialty: 'Oral Surgery', clinic_email: 'os@example.com' },
+    doctorName: doctor.full_name,
+    reason: 'Surgical extraction of non-restorable tooth #18 and evaluation of #19 for RCT.',
+    urgency: 'urgent',
+    extraNotes: 'Patient reports sensitivity to cold. Please coordinate scheduling with our office.',
+    includeAlerts: true,
+    includeFindings: true,
+    includeToothChart: true,
+    latestExam: exam,
+    findingNotes: Notes.listByExam(examId)
+  })
+  const refPdf = await renderHtmlToPdf(referralHtml)
+  fs.writeFileSync(`${outDir}/selftest-referral.pdf`, refPdf)
+  console.log('SELFTEST referral bytes =', refPdf.length)
+
+  // Tablet check-in server: start, serve the page, then stop.
+  const ks = await startKioskServer()
+  console.log('SELFTEST kiosk server port =', ks.port, 'urls =', ks.urls.length)
+  if (ks.urls[0]) {
+    try {
+      const res = await fetch(ks.urls[0])
+      const text = await res.text()
+      fs.writeFileSync(`${outDir}/checkin.html`, text)
+      console.log('SELFTEST kiosk page served =', res.status === 200 && text.includes('Patient Check-In'))
+    } catch (e) {
+      console.log('SELFTEST kiosk fetch error =', e instanceof Error ? e.message : String(e))
+    }
+  }
+  stopKioskServer()
+
   console.log('SELFTEST_DONE')
 }

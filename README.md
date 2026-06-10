@@ -41,6 +41,12 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 ### New in v1.1.1
 - **Voice typing (offline)** — a 🎤 Dictate button in Clinical Notes, Treatment Plan, and the Report summary focuses the field and lets you dictate with your computer's built-in voice typing (Windows **Win + H**). No internet, and nothing leaves the computer.
 
+### New in v1.2.0
+- **Events (per-event patient grouping)** — admins create an event (name, location, date); set one **active** and every new check-in (front desk or tablet) is auto-tagged to it. Filter patients by event, change a patient's event on their record, and **Export Event Folder** copies all tagged patients' files + a roster CSV into one folder (USB, etc.).
+- **Tablet check-in over local network** — Settings → *Tablet Check-In* starts a small on-device server; a tablet on the **same wifi/hotspot (no internet)** opens the link or scans the QR code, the patient completes intake + consent + signature, and they appear in the app instantly with a signed consent.
+- **Referral templates** — admins/doctors create reusable referral letters per receiving clinic (Settings → *Referral Templates*); generate a referral from any patient record and **print or email** it (auto-pulls medical alerts + latest findings, optional tooth-chart image).
+- **Extraction tooth condition** — a new purple **Extraction** status on the tooth chart, included in the legend, counts, and translated reports.
+
 ## Sign-in accounts
 
 Three accounts are created automatically on first launch:

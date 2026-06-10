@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { useAuth } from '@/store/auth'
-import type { PatientFullRecord, ImageWithUrl } from '@shared/types'
+import type { PatientFullRecord, ImageWithUrl, ClinicEvent } from '@shared/types'
 import { formatDate, formatDateTime, age } from '@/lib/format'
 import { todayISO } from '@/lib/format'
 import { Icon } from '@/components/icons'
 import { Modal, useToast } from '@/components/ui'
+import { ReferralModal } from '@/components/ReferralModal'
 
 type Tab = 'overview' | 'medical' | 'dental' | 'docs' | 'exams' | 'images'
 
@@ -20,6 +21,12 @@ export default function PatientRecord() {
   const [tab, setTab] = useState<Tab>('overview')
   const [viewImg, setViewImg] = useState<ImageWithUrl | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [referralOpen, setReferralOpen] = useState(false)
+  const [events, setEvents] = useState<ClinicEvent[]>([])
+
+  useEffect(() => {
+    api.events.list().then(setEvents)
+  }, [])
 
   const reload = useCallback(() => {
     api.patients.fullRecord(pid).then(setRec)
@@ -83,6 +90,7 @@ export default function PatientRecord() {
               {p.email && <span>✉ {p.email}</span>}
               <span style={{ textTransform: 'capitalize' }}>🗣 {p.preferred_language}</span>
               <span>Last visit: {formatDate(rec.lastVisit)}</span>
+              {p.event_name && <span className="pill azure">📍 {p.event_name}</span>}
             </div>
           </div>
           <div className="row wrap" style={{ gap: 8 }}>
@@ -95,6 +103,11 @@ export default function PatientRecord() {
             <button className="btn btn-sm btn-navy" onClick={() => navigate(`/patients/${pid}/consent`)}>
               <Icon name="doc" size={15} /> Sign Consent
             </button>
+            {canClinical && (
+              <button className="btn btn-sm btn-navy" onClick={() => setReferralOpen(true)}>
+                <Icon name="mail" size={15} /> Referral
+              </button>
+            )}
             {canClinical && (
               <button className="btn btn-sm btn-primary" onClick={startExam}>
                 <Icon name="tooth" size={15} /> New Examination
@@ -122,7 +135,7 @@ export default function PatientRecord() {
         {tabBtn('overview', 'Overview')}
         {tabBtn('medical', 'Medical History')}
         {tabBtn('dental', 'Dental History')}
-        {tabBtn('docs', `Forms & Documents (${rec.consents.length + rec.reports.length})`)}
+        {tabBtn('docs', `Forms & Documents (${rec.consents.length + rec.reports.length + rec.referrals.length})`)}
         {tabBtn('exams', `Examinations (${rec.exams.length})`)}
         {tabBtn('images', `Images (${rec.images.length})`)}
       </div>
@@ -142,7 +155,30 @@ export default function PatientRecord() {
             <Detail k="Examinations" v={String(rec.exams.length)} />
             <Detail k="Signed consents" v={String(rec.consents.length)} />
             <Detail k="Treatment reports" v={String(rec.reports.length)} />
+            <Detail k="Referrals" v={String(rec.referrals.length)} />
             <Detail k="Images" v={String(rec.images.length)} />
+            <div className="row" style={{ alignItems: 'center', padding: '7px 0', gap: 10 }}>
+              <div className="muted" style={{ width: 160, flexShrink: 0, fontSize: 13 }}>
+                Event
+              </div>
+              <select
+                style={{ maxWidth: 280 }}
+                value={p.event_id ?? ''}
+                onChange={async (e) => {
+                  const v = e.target.value ? Number(e.target.value) : null
+                  await api.patients.setEvent(pid, v)
+                  toast.push(v ? 'Patient tagged to event' : 'Patient untagged from event', 'success')
+                  reload()
+                }}
+              >
+                <option value="">— No event —</option>
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       )}
@@ -166,7 +202,7 @@ export default function PatientRecord() {
       {tab === 'docs' && (
         <div className="card">
           <div className="card-title">Forms & Documents</div>
-          {rec.consents.length + rec.reports.length === 0 ? (
+          {rec.consents.length + rec.reports.length + rec.referrals.length === 0 ? (
             <div className="empty">No documents yet.</div>
           ) : (
             <table className="data">
@@ -191,6 +227,22 @@ export default function PatientRecord() {
                         path={r.pdf_path}
                         email={{ to: p.email || '', name: `${p.first_name} ${p.last_name}` }}
                       />
+                    </td>
+                  </tr>
+                ))}
+                {rec.referrals.map((r) => (
+                  <tr key={`f${r.id}`}>
+                    <td>
+                      <span className="pill important" style={{ background: '#F3E8FA', color: '#7D3C98' }}>
+                        Referral
+                      </span>
+                    </td>
+                    <td>{formatDateTime(r.created_at)}</td>
+                    <td>
+                      {r.template_name ? `To ${r.template_name}` : 'Referral letter'} · by {r.doctor_name || '—'}
+                    </td>
+                    <td>
+                      <DocActions path={r.pdf_path} />
                     </td>
                   </tr>
                 ))}
@@ -300,6 +352,13 @@ export default function PatientRecord() {
       <Modal open={!!viewImg} title="Image" onClose={() => setViewImg(null)} wide>
         {viewImg && <img src={viewImg.url} alt="" style={{ width: '100%', borderRadius: 8 }} />}
       </Modal>
+
+      <ReferralModal
+        open={referralOpen}
+        patient={p}
+        onClose={() => setReferralOpen(false)}
+        onCreated={reload}
+      />
 
       <Modal
         open={confirmDelete}

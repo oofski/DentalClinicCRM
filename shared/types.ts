@@ -30,6 +30,8 @@ export interface Patient {
   insurance_info: string | null
   referring_doctor: string | null
   preferred_language: Language
+  event_id: number | null
+  event_name?: string | null
   created_at: string
   updated_at: string
 }
@@ -47,6 +49,7 @@ export type ToothConditionKey =
   | 'missing'
   | 'implant'
   | 'treatment'
+  | 'extraction'
 
 export type SurfaceKey = 'occlusal' | 'buccal' | 'lingual' | 'mesial' | 'distal'
 
@@ -175,11 +178,67 @@ export interface GeneratedDocResult {
 
 export type ImageWithUrl = PatientImage & { url: string }
 
+// ---------- Events (outreach / per-event patient grouping) ----------
+export interface ClinicEvent {
+  id: number
+  name: string
+  location: string | null
+  event_date: string | null
+  notes: string | null
+  status: 'open' | 'archived'
+  created_at: string
+  patient_count?: number
+}
+
+// ---------- Referrals ----------
+export interface ReferralTemplate {
+  id: number
+  name: string
+  specialty: string | null
+  clinic_name: string
+  clinic_address: string | null
+  clinic_phone: string | null
+  clinic_email: string | null
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Referral {
+  id: number
+  patient_id: number
+  template_id: number | null
+  template_name?: string | null
+  doctor_id: number
+  doctor_name?: string | null
+  pdf_path: string | null
+  created_at: string
+}
+
+export interface ReferralRequest {
+  patientId: number
+  templateId: number
+  reason: string
+  urgency: 'routine' | 'urgent'
+  extraNotes: string
+  includeAlerts: boolean
+  includeFindings: boolean
+  includeToothChart: boolean
+}
+
+// ---------- Tablet check-in server ----------
+export interface KioskServerStatus {
+  running: boolean
+  urls: string[]
+  port: number | null
+}
+
 export interface PatientFullRecord {
   patient: Patient
   lastVisit: string | null
   exams: Examination[]
   consents: ConsentForm[]
   reports: TreatmentReport[]
+  referrals: Referral[]
   images: ImageWithUrl[]
 }

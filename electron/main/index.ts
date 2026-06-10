@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import { initDatabase } from './db'
 import { registerIpc, setKioskFactory } from './ipc'
 import { isInsideDataDir } from './files'
+import { stopKioskServer } from './kioskServer'
 
 const RENDERER_URL = process.env['ELECTRON_RENDERER_URL']
 const PRELOAD = join(__dirname, '../preload/index.js')
@@ -149,4 +150,8 @@ app.on('window-all-closed', () => {
   // During the self-test there is no main window; transient print windows must not quit the app.
   if (process.env.GS_SELFTEST === '1') return
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  stopKioskServer()
 })

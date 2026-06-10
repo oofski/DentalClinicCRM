@@ -18,8 +18,12 @@ app.whenReady().then(async () => {
   })
   win.webContents.on('render-process-gone', (_e, d) => errors.push('GONE: ' + JSON.stringify(d)))
 
-  const route = process.env.SMOKE_ROUTE || '/login'
-  await win.loadFile(path.join(process.cwd(), 'out/renderer/index.html'), { hash: route })
+  if (process.env.SMOKE_FILE) {
+    await win.loadFile(process.env.SMOKE_FILE)
+  } else {
+    const route = process.env.SMOKE_ROUTE || '/login'
+    await win.loadFile(path.join(process.cwd(), 'out/renderer/index.html'), { hash: route })
+  }
   await new Promise((r) => setTimeout(r, 2500))
 
   console.log('RENDERER_ERRORS:', errors.length)

@@ -14,7 +14,10 @@ import type {
   AuditEntry,
   TreatmentItem,
   Language,
-  Role
+  Role,
+  ClinicEvent,
+  ReferralTemplate,
+  Referral
 } from '@shared/types'
 
 // ---------- Mappers ----------
@@ -47,10 +50,15 @@ function mapPatient(r: any): Patient {
     insurance_info: r.insurance_info ?? null,
     referring_doctor: r.referring_doctor ?? null,
     preferred_language: (r.preferred_language ?? 'english') as Language,
+    event_id: r.event_id != null ? Number(r.event_id) : null,
+    event_name: r.event_name ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at
   }
 }
+
+const PATIENT_SELECT = `SELECT p.*, ev.name AS event_name
+  FROM patients p LEFT JOIN events ev ON ev.id = p.event_id`
 
 function mapExamination(r: any): Examination {
   return {
@@ -120,13 +128,13 @@ export const Users = {
 
 // ---------- Patients ----------
 export const Patients = {
-  create(input: PatientInput): Patient {
+  create(input: PatientInput, eventId: number | null = null): Patient {
     const id = executeReturningId(
       `INSERT INTO patients
         (first_name, last_name, date_of_birth, phone, email, address, emergency_contact,
          emergency_phone, allergies, medical_conditions, medications, dental_history,
-         insurance_info, referring_doctor, preferred_language)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         insurance_info, referring_doctor, preferred_language, event_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         input.first_name,
         input.last_name,
@@ -142,7 +150,8 @@ export const Patients = {
         input.dental_history,
         input.insurance_info,
         input.referring_doctor,
-        input.preferred_language
+        input.preferred_language,
+        eventId
       ]
     )
     const patientId = `GS-${String(id).padStart(6, '0')}`
@@ -179,21 +188,32 @@ export const Patients = {
     return this.getById(id)!
   },
   getById(id: number): Patient | undefined {
-    const r = queryOne('SELECT * FROM patients WHERE id = ?', [id])
+    const r = queryOne(`${PATIENT_SELECT} WHERE p.id = ?`, [id])
     return r ? mapPatient(r) : undefined
   },
   search(term: string): Patient[] {
     const t = `%${term.trim()}%`
     return query(
-      `SELECT * FROM patients
-       WHERE first_name LIKE ? OR last_name LIKE ? OR patient_id LIKE ?
-          OR (first_name || ' ' || last_name) LIKE ?
-       ORDER BY updated_at DESC LIMIT 200`,
+      `${PATIENT_SELECT}
+       WHERE p.first_name LIKE ? OR p.last_name LIKE ? OR p.patient_id LIKE ?
+          OR (p.first_name || ' ' || p.last_name) LIKE ?
+       ORDER BY p.updated_at DESC LIMIT 200`,
       [t, t, t, t]
     ).map(mapPatient)
   },
   recent(limit = 50): Patient[] {
-    return query('SELECT * FROM patients ORDER BY updated_at DESC LIMIT ?', [limit]).map(mapPatient)
+    return query(`${PATIENT_SELECT} ORDER BY p.updated_at DESC LIMIT ?`, [limit]).map(mapPatient)
+  },
+  setEvent(patientId: number, eventId: number | null): void {
+    execute("UPDATE patients SET event_id = ?, updated_at = datetime('now') WHERE id = ?", [
+      eventId,
+      patientId
+    ])
+  },
+  listByEvent(eventId: number): Patient[] {
+    return query(`${PATIENT_SELECT} WHERE p.event_id = ? ORDER BY p.last_name, p.first_name`, [
+      eventId
+    ]).map(mapPatient)
   },
   count(): number {
     const r = queryOne<{ c: number }>('SELECT COUNT(*) AS c FROM patients')
@@ -216,6 +236,7 @@ export const Patients = {
     execute('DELETE FROM examinations WHERE patient_id = ?', [id])
     execute('DELETE FROM consent_forms WHERE patient_id = ?', [id])
     execute('DELETE FROM patient_images WHERE patient_id = ?', [id])
+    execute('DELETE FROM referrals WHERE patient_id = ?', [id])
     execute('DELETE FROM patients WHERE id = ?', [id])
   }
 }
@@ -425,6 +446,162 @@ export const Settings = {
         [key, stringValue]
       )
     }
+  }
+}
+
+// ---------- Events ----------
+function mapEvent(r: any): ClinicEvent {
+  return {
+    id: Number(r.id),
+    name: r.name,
+    location: r.location ?? null,
+    event_date: r.event_date ?? null,
+    notes: r.notes ?? null,
+    status: r.status === 'archived' ? 'archived' : 'open',
+    created_at: r.created_at,
+    patient_count: r.patient_count != null ? Number(r.patient_count) : undefined
+  }
+}
+
+export const Events = {
+  create(name: string, location: string | null, eventDate: string | null, notes: string | null): number {
+    return executeReturningId(
+      'INSERT INTO events (name, location, event_date, notes) VALUES (?,?,?,?)',
+      [name, location, eventDate, notes]
+    )
+  },
+  update(
+    id: number,
+    fields: { name: string; location: string | null; event_date: string | null; notes: string | null }
+  ): void {
+    execute('UPDATE events SET name = ?, location = ?, event_date = ?, notes = ? WHERE id = ?', [
+      fields.name,
+      fields.location,
+      fields.event_date,
+      fields.notes,
+      id
+    ])
+  },
+  setStatus(id: number, status: 'open' | 'archived'): void {
+    execute('UPDATE events SET status = ? WHERE id = ?', [status, id])
+  },
+  delete(id: number): { ok: boolean; error?: string } {
+    const c = queryOne<{ c: number }>('SELECT COUNT(*) AS c FROM patients WHERE event_id = ?', [id])
+    if (c && Number(c.c) > 0) {
+      return { ok: false, error: `This event has ${c.c} tagged patient(s). Archive it instead, or untag the patients first.` }
+    }
+    execute('DELETE FROM events WHERE id = ?', [id])
+    return { ok: true }
+  },
+  getById(id: number): ClinicEvent | undefined {
+    const r = queryOne(
+      `SELECT e.*, (SELECT COUNT(*) FROM patients p WHERE p.event_id = e.id) AS patient_count
+       FROM events e WHERE e.id = ?`,
+      [id]
+    )
+    return r ? mapEvent(r) : undefined
+  },
+  list(): ClinicEvent[] {
+    return query(
+      `SELECT e.*, (SELECT COUNT(*) FROM patients p WHERE p.event_id = e.id) AS patient_count
+       FROM events e ORDER BY e.status ASC, e.event_date DESC, e.id DESC`
+    ).map(mapEvent)
+  }
+}
+
+// Active event is stored in app_settings so it survives restarts.
+export const ActiveEvent = {
+  getId(): number | null {
+    const r = queryOne<{ value: string }>("SELECT value FROM app_settings WHERE key = 'active_event_id'")
+    const v = r?.value ? Number(r.value) : NaN
+    return Number.isFinite(v) && v > 0 ? v : null
+  },
+  set(id: number | null): void {
+    execute(
+      `INSERT INTO app_settings (key, value) VALUES ('active_event_id', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [id ? String(id) : '']
+    )
+  },
+  get(): ClinicEvent | null {
+    const id = this.getId()
+    if (!id) return null
+    const ev = Events.getById(id)
+    return ev && ev.status === 'open' ? ev : null
+  }
+}
+
+// ---------- Referral templates ----------
+function mapTemplate(r: any): ReferralTemplate {
+  return {
+    id: Number(r.id),
+    name: r.name,
+    specialty: r.specialty ?? null,
+    clinic_name: r.clinic_name ?? '',
+    clinic_address: r.clinic_address ?? null,
+    clinic_phone: r.clinic_phone ?? null,
+    clinic_email: r.clinic_email ?? null,
+    body: r.body ?? '',
+    created_at: r.created_at,
+    updated_at: r.updated_at
+  }
+}
+
+export const ReferralTemplates = {
+  list(): ReferralTemplate[] {
+    return query('SELECT * FROM referral_templates ORDER BY name').map(mapTemplate)
+  },
+  getById(id: number): ReferralTemplate | undefined {
+    const r = queryOne('SELECT * FROM referral_templates WHERE id = ?', [id])
+    return r ? mapTemplate(r) : undefined
+  },
+  create(t: Omit<ReferralTemplate, 'id' | 'created_at' | 'updated_at'>): number {
+    return executeReturningId(
+      `INSERT INTO referral_templates (name, specialty, clinic_name, clinic_address, clinic_phone, clinic_email, body)
+       VALUES (?,?,?,?,?,?,?)`,
+      [t.name, t.specialty, t.clinic_name, t.clinic_address, t.clinic_phone, t.clinic_email, t.body]
+    )
+  },
+  update(id: number, t: Omit<ReferralTemplate, 'id' | 'created_at' | 'updated_at'>): void {
+    execute(
+      `UPDATE referral_templates SET name=?, specialty=?, clinic_name=?, clinic_address=?,
+        clinic_phone=?, clinic_email=?, body=?, updated_at=datetime('now') WHERE id=?`,
+      [t.name, t.specialty, t.clinic_name, t.clinic_address, t.clinic_phone, t.clinic_email, t.body, id]
+    )
+  },
+  delete(id: number): void {
+    // Past referrals keep their PDFs; just detach the template reference.
+    execute('UPDATE referrals SET template_id = NULL WHERE template_id = ?', [id])
+    execute('DELETE FROM referral_templates WHERE id = ?', [id])
+  }
+}
+
+// ---------- Referrals ----------
+export const Referrals = {
+  create(patientId: number, templateId: number | null, doctorId: number, pdfPath: string): number {
+    return executeReturningId(
+      'INSERT INTO referrals (patient_id, template_id, doctor_id, pdf_path) VALUES (?,?,?,?)',
+      [patientId, templateId, doctorId, pdfPath]
+    )
+  },
+  listByPatient(patientId: number): Referral[] {
+    return query(
+      `SELECT r.*, t.name AS template_name, u.full_name AS doctor_name
+       FROM referrals r
+       LEFT JOIN referral_templates t ON t.id = r.template_id
+       LEFT JOIN users u ON u.id = r.doctor_id
+       WHERE r.patient_id = ? ORDER BY r.created_at DESC`,
+      [patientId]
+    ).map((r: any) => ({
+      id: Number(r.id),
+      patient_id: Number(r.patient_id),
+      template_id: r.template_id != null ? Number(r.template_id) : null,
+      template_name: r.template_name ?? null,
+      doctor_id: Number(r.doctor_id),
+      doctor_name: r.doctor_name ?? null,
+      pdf_path: r.pdf_path ?? null,
+      created_at: r.created_at
+    }))
   }
 }
 

@@ -25,7 +25,8 @@ export function emptyPatientInput(): PatientInput {
     dental_history: '',
     insurance_info: '',
     referring_doctor: '',
-    preferred_language: 'english'
+    preferred_language: 'english',
+    event_id: null
   }
 }
 

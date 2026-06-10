@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
 const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args)
 
@@ -25,7 +25,42 @@ const api = {
     count: () => invoke('patients:count'),
     fullRecord: (id: number) => invoke('patients:fullRecord', id),
     printSummary: (id: number) => invoke('patient:printSummary', id),
-    delete: (id: number) => invoke('patients:delete', id)
+    delete: (id: number) => invoke('patients:delete', id),
+    setEvent: (id: number, eventId: number | null) => invoke('patients:setEvent', id, eventId)
+  },
+  events: {
+    list: () => invoke('events:list'),
+    create: (args: unknown) => invoke('events:create', args),
+    update: (id: number, args: unknown) => invoke('events:update', id, args),
+    setStatus: (id: number, status: string) => invoke('events:setStatus', id, status),
+    delete: (id: number) => invoke('events:delete', id),
+    setActive: (id: number | null) => invoke('events:setActive', id),
+    getActive: () => invoke('events:getActive'),
+    listPatients: (id: number) => invoke('events:listPatients', id),
+    export: (id: number) => invoke('events:export', id)
+  },
+  reftpl: {
+    list: () => invoke('reftpl:list'),
+    create: (t: unknown) => invoke('reftpl:create', t),
+    update: (id: number, t: unknown) => invoke('reftpl:update', id, t),
+    delete: (id: number) => invoke('reftpl:delete', id)
+  },
+  referral: {
+    generate: (args: unknown) => invoke('referral:generate', args),
+    print: (args: unknown) => invoke('referral:print', args)
+  },
+  kioskServer: {
+    start: () => invoke('kioskserver:start'),
+    stop: () => invoke('kioskserver:stop'),
+    status: () => invoke('kioskserver:status')
+  },
+  live: {
+    onCheckin: (cb: (p: { id: number; name: string; patient_id: string }) => void) => {
+      const listener = (_e: IpcRendererEvent, payload: { id: number; name: string; patient_id: string }) =>
+        cb(payload)
+      ipcRenderer.on('live:checkin', listener)
+      return () => ipcRenderer.removeListener('live:checkin', listener)
+    }
   },
   exams: {
     create: (patientId: number, examDate: string) => invoke('exams:create', patientId, examDate),
@@ -58,7 +93,9 @@ const api = {
   },
   doc: {
     open: (path: string) => invoke('doc:open', path),
-    reveal: (path: string) => invoke('doc:reveal', path)
+    reveal: (path: string) => invoke('doc:reveal', path),
+    email: (args: { pdfPath: string; to: string; subject: string; text: string }) =>
+      invoke('doc:email', args)
   },
   images: {
     pick: () => invoke('images:pick'),
