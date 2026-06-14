@@ -14,6 +14,7 @@ import type {
 import { Field, Modal, useToast } from '@/components/ui'
 import { formatDateTime } from '@/lib/format'
 import { Icon } from '@/components/icons'
+import { PRODUCT, COMPANY, COPYRIGHT, TRADEMARK } from '@shared/legal'
 
 export default function Settings() {
   const me = useAuth((s) => s.user)
@@ -31,12 +32,13 @@ export default function Settings() {
   const [pw, setPw] = useState({ old: '', next: '', confirm: '' })
 
   const reloadUsers = () => api.users.list().then(setUsers)
+  const reloadAudit = () => api.audit.recent(100).then(setAudit)
 
   useEffect(() => {
     api.settings.get().then(setS)
     reloadUsers()
     api.app.info().then((i) => setInfo({ dataDir: i.dataDir }))
-    if (isAdmin) api.audit.recent(100).then(setAudit)
+    if (isAdmin) reloadAudit()
   }, [isAdmin])
 
   if (!s) return <div className="empty">Loading…</div>
@@ -276,7 +278,39 @@ export default function Settings() {
       {/* Audit */}
       {isAdmin && (
         <div className="card">
-          <div className="card-title">Activity Log</div>
+          <div className="card-title">
+            Activity Log
+            <div className="row" style={{ gap: 8 }}>
+              <button
+                className="btn btn-sm"
+                onClick={async () => {
+                  const r = await api.audit.export()
+                  if (r.ok) toast.push(`Activity log saved (${r.count} entries)`, 'success')
+                  else if (r.error !== 'Cancelled') toast.push(r.error || 'Export failed', 'error')
+                }}
+              >
+                Download CSV
+              </button>
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      'Clear the entire activity log? This cannot be undone. (A single entry noting that it was cleared, and by whom, will remain.)'
+                    )
+                  )
+                    return
+                  const r = await api.audit.clear()
+                  if (r.ok) {
+                    toast.push('Activity log cleared', 'success')
+                    reloadAudit()
+                  } else toast.push(r.error || 'Failed', 'error')
+                }}
+              >
+                Clear Log
+              </button>
+            </div>
+          </div>
           {audit.length === 0 ? (
             <div className="empty">No activity recorded yet.</div>
           ) : (
@@ -304,7 +338,34 @@ export default function Settings() {
         </div>
       )}
 
+      <AboutCard />
+
       <AddUserModal open={addOpen} onClose={() => setAddOpen(false)} onAdded={reloadUsers} />
+    </div>
+  )
+}
+
+// ---------------- About & Legal ----------------
+function AboutCard() {
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    api.app.info().then((i) => setVersion(i.version))
+  }, [])
+  return (
+    <div className="card">
+      <div className="card-title">About &amp; Legal</div>
+      <div style={{ fontWeight: 700, color: 'var(--navy)' }}>
+        {PRODUCT}™{version ? ` — v${version}` : ''}
+      </div>
+      <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+        {COPYRIGHT}
+      </div>
+      <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+        {TRADEMARK}
+      </div>
+      <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+        Developed and maintained by {COMPANY}.
+      </div>
     </div>
   )
 }

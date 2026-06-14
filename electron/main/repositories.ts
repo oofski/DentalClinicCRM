@@ -630,5 +630,15 @@ export const Audit = {
       detail: r.detail ?? null,
       timestamp: r.timestamp
     }))
+  },
+  all(): AuditEntry[] {
+    return this.recent(1_000_000)
+  },
+  clear(userId: number): void {
+    execute('DELETE FROM audit_log')
+    // Keep one accountability entry recording who cleared the log.
+    execute("INSERT INTO audit_log (user_id, action, detail) VALUES (?, 'clear_audit_log', 'Activity log cleared')", [
+      userId
+    ])
   }
 }

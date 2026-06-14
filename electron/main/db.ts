@@ -196,25 +196,21 @@ function createSchema(): void {
   `)
 }
 
-const DEFAULT_PASSWORD = 'GivingSmiles2026'
+const DEFAULT_PASSWORD = 'admin123'
 
 function seedDefaults(): void {
   const row = queryOne<{ c: number }>('SELECT COUNT(*) AS c FROM users')
   if (!row || row.c === 0) {
-    const accounts = [
-      { username: 'sidharthrane', full_name: 'Sidharth Rane', role: 'admin' },
-      { username: 'drseitz', full_name: 'Dr. Seitz', role: 'doctor' },
-      { username: 'frontend', full_name: 'Front End', role: 'front_desk' }
-    ]
-    for (const a of accounts) {
-      const hash = bcrypt.hashSync(DEFAULT_PASSWORD, 10)
-      db.run('INSERT INTO users (username, password_hash, full_name, role) VALUES (?,?,?,?)', [
-        a.username,
-        hash,
-        a.full_name,
-        a.role
-      ])
-    }
+    // A fresh install bootstraps with a single generic administrator account.
+    // The clinic signs in as admin / admin123 and creates their own staff logins
+    // (and should change this password) from Settings → User Management.
+    const hash = bcrypt.hashSync(DEFAULT_PASSWORD, 10)
+    db.run('INSERT INTO users (username, password_hash, full_name, role) VALUES (?,?,?,?)', [
+      'admin',
+      hash,
+      'Administrator',
+      'admin'
+    ])
   }
 
   const tpl = queryOne<{ c: number }>('SELECT COUNT(*) AS c FROM referral_templates')

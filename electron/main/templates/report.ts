@@ -4,6 +4,7 @@ import { logoLockupSvg } from '@shared/branding'
 import { CONDITIONS } from '@shared/dental'
 import { toothChartSvgString } from '@shared/toothChart'
 import { REPORT_STRINGS } from '@shared/reportStrings'
+import { COPYRIGHT } from '@shared/legal'
 import type {
   Patient,
   ClinicSettings,
@@ -209,7 +210,7 @@ export function buildReportHtml(input: ReportRenderInput): string {
 
   const footer = `<div class="footer">${esc(c.clinic_name)} · ${esc(c.address)} · ${esc(
     c.phone
-  )} — ${esc(t.generatedBy)} ${formatDateTime(new Date().toISOString())}</div>`
+  )} — ${esc(t.generatedBy)} ${formatDateTime(new Date().toISOString())}<br/>${COPYRIGHT}</div>`
 
   const body = `<div class="doc">
     ${header}

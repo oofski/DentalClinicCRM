@@ -2,6 +2,7 @@ import { CONSENT_CONTENT } from './consentContent'
 import { htmlShell } from './docStyles'
 import { esc, formatDate, formatDateTime } from './util'
 import { logoLockupSvg } from '@shared/branding'
+import { COPYRIGHT } from '@shared/legal'
 import type { Patient, ClinicSettings, Language } from '@shared/types'
 
 export interface ConsentRenderInput {
@@ -78,7 +79,9 @@ export function buildConsentHtml(input: ConsentRenderInput): string {
 
   const footer = `<div class="footer">${esc(
     c.clinic_name
-  )} — Electronically signed via Giving Smiles on ${formatDateTime(input.signedAt)}</div>`
+  )} — Electronically signed via Giving Smiles on ${formatDateTime(
+    input.signedAt
+  )}<br/>${COPYRIGHT}</div>`
 
   const body = `<div class="doc">
     ${header}

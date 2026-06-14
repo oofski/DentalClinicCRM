@@ -191,7 +191,11 @@ export interface Api {
       partial: Partial<ClinicSettings>
     ): Promise<{ ok: boolean; error?: string; data?: ClinicSettings }>
   }
-  audit: { recent(limit?: number): Promise<AuditEntry[]> }
+  audit: {
+    recent(limit?: number): Promise<AuditEntry[]>
+    export(): Promise<{ ok: boolean; error?: string; path?: string; count?: number }>
+    clear(): Promise<{ ok: boolean; error?: string }>
+  }
   data: {
     openFolder(): Promise<string>
     backup(): Promise<{ ok: boolean; path?: string; error?: string }>

@@ -54,17 +54,20 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 - **Show password** toggle on the sign-in screen.
 - **Delete events** directly (admin) — from the Events page you can now delete an event outright; its patients are kept and simply untagged (records and files untouched), so you're no longer limited to archiving.
 
+### New in v1.2.3
+- **Single bootstrap admin** — a fresh install now starts with one generic `admin` / `admin123` login; the login screen no longer shows any credentials. Create your own staff logins from Settings → User Management and change the password.
+- **Activity log management** (admin) — **Download CSV** and **Clear Log** buttons in Settings.
+- **Trademark / legal** — *Giving Smiles™ — © 2026 Software Smiles* notices added to the app, the PDF documents, and the installer metadata.
+
 ## Sign-in accounts
 
-Three accounts are created automatically on first launch:
+A fresh install bootstraps with a **single administrator** account:
 
-| Username | Name | Role | Access |
-|---|---|---|---|
-| `sidharthrane` | Sidharth Rane | **Admin** | Everything + settings, users, backup, activity log |
-| `drseitz` | Dr. Seitz | **Doctor** | Full clinical: exams, tooth chart, reports |
-| `frontend` | Front End | **Front Desk** | Intake, consent, check-in, document archive (view) |
+| Username | Password | Role |
+|---|---|---|
+| `admin` | `admin123` | **Administrator** |
 
-**Default password for all three: `GivingSmiles2026`** — change it in **Settings → Change My Password** after first sign-in.
+Sign in as `admin`, then create your clinic's own staff logins (doctor / front desk) and change the admin password from **Settings → User Management** and **Settings → Change My Password**. *(Already-installed machines keep whatever accounts they already had — this only applies to fresh installs.)*
 
 ## Getting the Windows app
 

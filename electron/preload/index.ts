@@ -119,7 +119,9 @@ const api = {
     update: (partial: unknown) => invoke('settings:update', partial)
   },
   audit: {
-    recent: (limit?: number) => invoke('audit:recent', limit)
+    recent: (limit?: number) => invoke('audit:recent', limit),
+    export: () => invoke('audit:export'),
+    clear: () => invoke('audit:clear')
   },
   data: {
     openFolder: () => invoke('data:openFolder'),

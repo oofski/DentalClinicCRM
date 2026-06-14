@@ -707,6 +707,33 @@ export function registerIpc(): void {
     return Audit.recent(limit ?? 200)
   })
 
+  ipcMain.handle('audit:export', async () => {
+    const u = requireUser()
+    if (u.role !== 'admin') return { ok: false, error: 'Only administrators can export the activity log' }
+    const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const rows = Audit.all()
+    const header = ['Timestamp', 'User', 'Action', 'Detail', 'Patient ID'].map(cell).join(',')
+    const lines = rows.map((a) =>
+      [a.timestamp, a.user_name || `#${a.user_id}`, a.action, a.detail || '', a.patient_id ?? '']
+        .map(cell)
+        .join(',')
+    )
+    const def = `GivingSmiles-ActivityLog-${new Date().toISOString().slice(0, 10)}.csv`
+    const res = await dialog.showSaveDialog({ title: 'Download activity log', defaultPath: def })
+    if (res.canceled || !res.filePath) return { ok: false, error: 'Cancelled' }
+    // UTF-8 BOM so Excel renders names/symbols correctly.
+    fs.writeFileSync(res.filePath, '\uFEFF' + [header, ...lines].join('\r\n'))
+    Audit.log(u.id, null, 'export_audit_log', `${rows.length} entries → ${res.filePath}`)
+    return { ok: true, path: res.filePath, count: rows.length }
+  })
+
+  ipcMain.handle('audit:clear', () => {
+    const u = requireUser()
+    if (u.role !== 'admin') return { ok: false, error: 'Only administrators can clear the activity log' }
+    Audit.clear(u.id)
+    return { ok: true }
+  })
+
   // ---------------- Backup / data ----------------
   ipcMain.handle('data:openFolder', () => shell.openPath(dataDir()))
   ipcMain.handle('data:backup', async () => {

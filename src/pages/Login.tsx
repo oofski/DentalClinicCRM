@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/store/auth'
 import { Logo } from '@/components/Logo'
+import { PRODUCT, COMPANY, COPYRIGHT_YEAR } from '@shared/legal'
 
 export default function Login() {
   const { user, login } = useAuth()
@@ -43,7 +44,7 @@ export default function Login() {
             autoFocus
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="e.g. drseitz"
+            placeholder="Username"
           />
         </div>
         <div className="field" style={{ textAlign: 'left' }}>
@@ -90,17 +91,8 @@ export default function Login() {
           {busy ? 'Signing in…' : 'Sign In'}
         </button>
 
-        <div className="login-hint">
-          <b>Accounts for this clinic</b>
-          <div style={{ marginTop: 4 }}>
-            • <code>sidharthrane</code> — Admin
-            <br />• <code>drseitz</code> — Dr. Seitz (Doctor)
-            <br />• <code>frontend</code> — Front Desk
-          </div>
-          <div style={{ marginTop: 6 }}>
-            Default password: <code>GivingSmiles2026</code> — please change it in Settings after first
-            sign-in.
-          </div>
+        <div className="muted" style={{ fontSize: 11, marginTop: 18, textAlign: 'center' }}>
+          {PRODUCT}™ — © {COPYRIGHT_YEAR} {COMPANY}
         </div>
       </form>
     </div>

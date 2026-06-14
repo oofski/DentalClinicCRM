@@ -1,6 +1,7 @@
 import { htmlShell } from './docStyles'
 import { esc, formatDate, formatDateTime, age } from './util'
 import { logoLockupSvg } from '@shared/branding'
+import { COPYRIGHT } from '@shared/legal'
 import type {
   Patient,
   ClinicSettings,
@@ -99,7 +100,7 @@ export function buildSummaryHtml(input: SummaryRenderInput): string {
     </section>
     <div class="footer">${esc(c.clinic_name)} — Patient summary generated ${formatDateTime(
       new Date().toISOString()
-    )}</div>
+    )}<br/>${COPYRIGHT}</div>
   </div>`
 
   return htmlShell({ title: 'Patient Summary', body })

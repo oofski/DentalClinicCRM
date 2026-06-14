@@ -204,7 +204,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
             color: 'rgba(255,255,255,0.45)'
           }}
         >
-          Giving Smiles{version ? ` v${version}` : ''}
+          Giving Smiles™{version ? ` v${version}` : ''}
+          <div style={{ fontSize: 10, marginTop: 2 }}>© 2026 Software Smiles</div>
         </div>
       </aside>
 
