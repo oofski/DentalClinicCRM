@@ -14,7 +14,7 @@ import type {
 import { Field, Modal, useToast } from '@/components/ui'
 import { formatDateTime } from '@/lib/format'
 import { Icon } from '@/components/icons'
-import { PRODUCT, COMPANY, COPYRIGHT, TRADEMARK } from '@shared/legal'
+import { PRODUCT, COMPANY_TM, COPYRIGHT, TRADEMARK } from '@shared/legal'
 
 export default function Settings() {
   const me = useAuth((s) => s.user)
@@ -355,7 +355,7 @@ function AboutCard() {
     <div className="card">
       <div className="card-title">About &amp; Legal</div>
       <div style={{ fontWeight: 700, color: 'var(--navy)' }}>
-        {PRODUCT}™{version ? ` — v${version}` : ''}
+        {PRODUCT}{version ? ` — v${version}` : ''}
       </div>
       <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
         {COPYRIGHT}
@@ -364,7 +364,7 @@ function AboutCard() {
         {TRADEMARK}
       </div>
       <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-        Developed and maintained by {COMPANY}.
+        Developed and maintained by {COMPANY_TM}.
       </div>
     </div>
   )

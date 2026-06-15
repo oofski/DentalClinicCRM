@@ -60,7 +60,10 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 - **Trademark / legal** — *Giving Smiles™ — © 2026 Software Smiles* notices added to the app, the PDF documents, and the installer metadata.
 
 ### New in v1.2.4
-- **Reliable auto-update** — fixed update checks failing with a GitHub `releases.atom` 404 (GitHub rate-limits that feed for unauthenticated clients). The updater now reads the `latest.yml` manifest directly from the stable `releases/latest/download` URL, which isn't rate-limited.
+- **Reliable auto-update** — fixed update checks failing with a GitHub `releases.atom` 404 (GitHub rate-limits that feed for unauthenticated clients). The updater now reads the `latest.yml` manifest directly from the stable `releases/latest/download` URL, which isn't rate-limited. *(Auto-update requires the repository to be public so the app can read releases without a login.)*
+
+### New in v1.2.5
+- **Trademark wording** — the ™ now sits on **Software Smiles™** (the company), not on the Giving Smiles product, across the app, PDFs, and installer metadata.
 
 ## Sign-in accounts
 

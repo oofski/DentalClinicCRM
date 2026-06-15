@@ -92,7 +92,7 @@ export default function Login() {
         </button>
 
         <div className="muted" style={{ fontSize: 11, marginTop: 18, textAlign: 'center' }}>
-          {PRODUCT}™ — © {COPYRIGHT_YEAR} {COMPANY}
+          {PRODUCT} — © {COPYRIGHT_YEAR} {COMPANY}™
         </div>
       </form>
     </div>
