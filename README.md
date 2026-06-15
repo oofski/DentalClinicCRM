@@ -59,6 +59,9 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 - **Activity log management** (admin) — **Download CSV** and **Clear Log** buttons in Settings.
 - **Trademark / legal** — *Giving Smiles™ — © 2026 Software Smiles* notices added to the app, the PDF documents, and the installer metadata.
 
+### New in v1.2.4
+- **Reliable auto-update** — fixed update checks failing with a GitHub `releases.atom` 404 (GitHub rate-limits that feed for unauthenticated clients). The updater now reads the `latest.yml` manifest directly from the stable `releases/latest/download` URL, which isn't rate-limited.
+
 ## Sign-in accounts
 
 A fresh install bootstraps with a **single administrator** account:

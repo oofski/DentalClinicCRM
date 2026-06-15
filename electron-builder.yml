@@ -13,11 +13,15 @@ files:
   - out/**/*
   - package.json
 
-# Auto-update feed: electron-updater checks this repo's GitHub Releases for latest.yml.
+# Auto-update feed.
+# We use the "generic" provider pointed at GitHub's stable "latest release" download
+# path instead of the default GitHub provider. The GitHub provider relies on the
+# releases.atom feed, which GitHub rate-limits/404s for unauthenticated clients; reading
+# latest.yml directly from releases/latest/download is a plain file fetch and is reliable.
 publish:
-  provider: github
-  owner: oofski
-  repo: DentalClinicCRM
+  provider: generic
+  url: https://github.com/oofski/DentalClinicCRM/releases/latest/download
+  channel: latest
 
 # The sql.js WebAssembly engine must be a real file on disk (cannot run from inside the asar).
 extraResources:
