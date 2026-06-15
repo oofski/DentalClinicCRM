@@ -65,6 +65,9 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 ### New in v1.2.5
 - **Trademark wording** — the ™ now sits on **Software Smiles™** (the company), not on the Giving Smiles product, across the app, PDFs, and installer metadata.
 
+### New in v1.2.6
+- **License gate (offline, no server)** — each computer must enter a one-time **unlock code** before the app can be used. The installer stays freely downloadable but is inert without the code, so you control who can actually run it — and the repo can stay public (auto-update keeps working). Only the bcrypt *hash* of the code lives in the repo; change the code anytime with `node scripts/make-unlock-hash.mjs "NEW-CODE"` and paste the hash into `electron/main/license.ts`.
+
 ## Sign-in accounts
 
 A fresh install bootstraps with a **single administrator** account:

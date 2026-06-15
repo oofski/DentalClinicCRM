@@ -3,6 +3,10 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args)
 
 const api = {
+  license: {
+    status: () => invoke('license:status'),
+    activate: (code: string) => invoke('license:activate', code)
+  },
   auth: {
     login: (username: string, password: string) => invoke('auth:login', username, password),
     logout: () => invoke('auth:logout'),

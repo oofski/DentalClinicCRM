@@ -30,6 +30,10 @@ interface Ok<T = undefined> {
 }
 
 export interface Api {
+  license: {
+    status(): Promise<{ activated: boolean }>
+    activate(code: string): Promise<{ ok: boolean; error?: string }>
+  }
   auth: {
     login(username: string, password: string): Promise<AuthResult>
     logout(): Promise<Ok<boolean>>

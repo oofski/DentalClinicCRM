@@ -1,9 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from './store/auth'
+import { api } from './lib/api'
 import { AppLayout } from './components/AppLayout'
 import { LogoMark } from './components/Logo'
 import Login from './pages/Login'
+import LicenseGate from './pages/LicenseGate'
 import Dashboard from './pages/Dashboard'
 import Patients from './pages/Patients'
 import PatientForm from './pages/PatientForm'
@@ -40,11 +42,20 @@ function RequireAuth() {
 
 export default function App() {
   const { ready, init } = useAuth()
+  const [licensed, setLicensed] = useState<boolean | null>(null)
+
   useEffect(() => {
     init()
+    api.license
+      .status()
+      .then((s) => setLicensed(s.activated))
+      .catch(() => setLicensed(false))
   }, [init])
 
-  if (!ready) return <Splash />
+  if (!ready || licensed === null) return <Splash />
+
+  // Outermost gate: the computer must be unlocked before anyone can sign in.
+  if (!licensed) return <LicenseGate onActivated={() => setLicensed(true)} />
 
   return (
     <Routes>

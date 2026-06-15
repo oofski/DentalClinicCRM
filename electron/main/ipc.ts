@@ -27,6 +27,7 @@ import { buildReferralHtml } from './templates/referral'
 import { emailPdf } from './email'
 import { startKioskServer, stopKioskServer, kioskServerStatus } from './kioskServer'
 import { checkForUpdates, downloadUpdate, quitAndInstall, getUpdateStatus } from './updater'
+import { isActivated, activate } from './license'
 import { join } from 'node:path'
 import type {
   User,
@@ -55,6 +56,10 @@ function ok<T>(data: T) {
 }
 
 export function registerIpc(): void {
+  // ---------------- License gate (before sign-in; no auth required) ----------------
+  ipcMain.handle('license:status', () => ({ activated: isActivated() }))
+  ipcMain.handle('license:activate', (_e, code: string) => activate(code))
+
   // ---------------- Auth ----------------
   ipcMain.handle('auth:login', (_e, username: string, password: string) => {
     const res = verifyLogin(username, password)
