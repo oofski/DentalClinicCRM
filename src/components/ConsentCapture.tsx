@@ -21,11 +21,19 @@ const SPEECH_LANG: Record<Language, string> = {
 export function ConsentCapture({
   patient,
   providerName,
-  onComplete
+  onComplete,
+  saveOverride
 }: {
-  patient: Patient
+  patient: Pick<Patient, 'id' | 'first_name' | 'last_name' | 'preferred_language'>
   providerName?: string
   onComplete: (pdfPath?: string) => void
+  // OFFLINE mode: instead of creating a consent on this machine, hand the captured data
+  // back (e.g. to bundle onto a USB drive). When set, api.consent.generate is not called.
+  saveOverride?: (payload: {
+    language: Language
+    signedByName: string
+    signatureDataUrl: string | null
+  }) => Promise<{ ok: boolean; error?: string }>
 }) {
   const toast = useToast()
   const [language, setLanguage] = useState<Language>(patient.preferred_language || 'english')
@@ -92,6 +100,12 @@ export function ConsentCapture({
     if (canSpeak) window.speechSynthesis.cancel()
     setBusy(true)
     try {
+      if (saveOverride) {
+        const res = await saveOverride({ language, signedByName: name.trim(), signatureDataUrl: signature })
+        if (res.ok) onComplete()
+        else toast.push(res.error || 'Failed to save', 'error')
+        return
+      }
       const res = await api.consent.generate({
         patientId: patient.id,
         language,

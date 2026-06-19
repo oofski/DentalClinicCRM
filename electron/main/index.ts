@@ -84,7 +84,7 @@ function createMainWindow(): BrowserWindow {
   return win
 }
 
-function createKioskWindow(): BrowserWindow {
+function createKioskWindow(mode = 'local'): BrowserWindow {
   const win = new BrowserWindow({
     width: 1100,
     height: 820,
@@ -104,10 +104,11 @@ function createKioskWindow(): BrowserWindow {
     win.maximize()
     win.show()
   })
+  const route = `/kiosk?mode=${encodeURIComponent(mode)}`
   if (RENDERER_URL) {
-    win.loadURL(`${RENDERER_URL}#/kiosk`)
+    win.loadURL(`${RENDERER_URL}#${route}`)
   } else {
-    win.loadFile(INDEX_HTML, { hash: '/kiosk' })
+    win.loadFile(INDEX_HTML, { hash: route })
   }
   return win
 }

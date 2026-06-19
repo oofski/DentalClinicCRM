@@ -22,6 +22,7 @@ import type {
   KioskServerStatus,
   UpdateStatus
 } from '@shared/types'
+import type { CheckInBundle, ImportedCheckIn } from '@shared/checkin'
 
 interface Ok<T = undefined> {
   ok: boolean
@@ -205,7 +206,18 @@ export interface Api {
     backup(): Promise<{ ok: boolean; path?: string; error?: string }>
   }
   app: { info(): Promise<{ dataDir: string; dbPath: string; version: string }> }
-  kiosk: { open(): Promise<Ok<boolean>> }
+  kiosk: { open(mode?: 'online' | 'local' | 'offline'): Promise<Ok<boolean>> }
+  checkin: {
+    saveBundle(
+      bundle: CheckInBundle
+    ): Promise<{ ok: boolean; error?: string; path?: string }>
+    importFromUsb(): Promise<{
+      ok: boolean
+      error?: string
+      imported?: ImportedCheckIn[]
+      failed?: number
+    }>
+  }
   platform: string
 }
 

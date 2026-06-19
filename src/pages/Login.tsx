@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/store/auth'
+import { useSession } from '@/store/session'
 import { Logo } from '@/components/Logo'
 import { PRODUCT, COMPANY, COPYRIGHT_YEAR } from '@shared/legal'
 
@@ -12,6 +13,7 @@ export default function Login() {
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const { mode, setMode } = useSession()
 
   useEffect(() => {
     if (user) navigate('/', { replace: true })
@@ -79,6 +81,33 @@ export default function Login() {
               {showPw ? 'Hide' : 'Show'}
             </button>
           </div>
+        </div>
+
+        <div className="field" style={{ textAlign: 'left' }}>
+          <label>Check-In Mode</label>
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              type="button"
+              className={`btn btn-sm ${mode === 'online' ? 'btn-primary' : ''}`}
+              style={{ flex: 1 }}
+              onClick={() => setMode('online')}
+            >
+              🌐 Online
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${mode === 'offline' ? 'btn-primary' : ''}`}
+              style={{ flex: 1 }}
+              onClick={() => setMode('offline')}
+            >
+              🔌 Offline (USB)
+            </button>
+          </div>
+          <span className="muted" style={{ fontSize: 11.5, marginTop: 4, display: 'block' }}>
+            {mode === 'online'
+              ? 'Patients check in from a tablet on the same wifi (QR code).'
+              : 'Patients check in onto a USB flash drive; import it on the doctor’s computer.'}
+          </span>
         </div>
 
         {error && (

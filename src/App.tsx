@@ -15,6 +15,7 @@ import Exam from './pages/Exam'
 import Settings from './pages/Settings'
 import Kiosk from './pages/Kiosk'
 import Events from './pages/Events'
+import CheckIn from './pages/CheckIn'
 
 function Splash() {
   return (
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="/patients/:id/consent" element={<Consent />} />
         <Route path="/exam/:examId" element={<Exam />} />
         <Route path="/events" element={<Events />} />
+        <Route path="/checkin" element={<CheckIn />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { Patient, PatientInput, Language } from '@shared/types'
 import { INTAKE_STRINGS } from '@shared/intakeStrings'
 import {
@@ -22,6 +23,8 @@ const LANGS: { key: Language; label: string }[] = [
 
 export default function Kiosk() {
   const toast = useToast()
+  const [params] = useSearchParams()
+  const offline = params.get('mode') === 'offline'
   const [step, setStep] = useState<Step>('welcome')
   const [value, setValue] = useState<PatientInput>(emptyPatientInput())
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -44,6 +47,12 @@ export default function Kiosk() {
     setErrors(e)
     if (Object.keys(e).length) {
       toast.push('Please complete the required fields', 'error')
+      return
+    }
+    // OFFLINE mode: don't create the patient on this device — it's bundled to USB at the
+    // consent step and imported on the doctor's computer later.
+    if (offline) {
+      setStep('consent')
       return
     }
     setBusy(true)
@@ -138,13 +147,37 @@ export default function Kiosk() {
           </div>
         )}
 
-        {step === 'consent' && patient && (
+        {step === 'consent' && (offline || patient) && (
           <div className="stack">
             <h1>{t.consentTitle}</h1>
             <p className="muted" style={{ marginTop: -8 }}>
               {t.consentReview}
             </p>
-            <ConsentCapture patient={patient} onComplete={() => setStep('done')} />
+            <ConsentCapture
+              patient={
+                offline
+                  ? {
+                      id: 0,
+                      first_name: value.first_name,
+                      last_name: value.last_name,
+                      preferred_language: value.preferred_language
+                    }
+                  : patient!
+              }
+              onComplete={() => setStep('done')}
+              saveOverride={
+                offline
+                  ? async ({ language, signedByName, signatureDataUrl }) =>
+                      api.checkin.saveBundle({
+                        createdAt: new Date().toISOString(),
+                        patient: normalizePatient(value),
+                        language,
+                        signedByName,
+                        signatureDataUrl
+                      })
+                  : undefined
+              }
+            />
           </div>
         )}
 

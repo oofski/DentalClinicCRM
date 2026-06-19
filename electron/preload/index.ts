@@ -135,7 +135,11 @@ const api = {
     info: () => invoke('app:info')
   },
   kiosk: {
-    open: () => invoke('kiosk:open')
+    open: (mode?: string) => invoke('kiosk:open', mode)
+  },
+  checkin: {
+    saveBundle: (bundle: unknown) => invoke('checkin:saveBundle', bundle),
+    importFromUsb: () => invoke('checkin:importFromUsb')
   },
   platform: process.platform
 }

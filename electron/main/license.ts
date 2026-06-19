@@ -16,6 +16,11 @@ function storedCode(): string | null {
   return r?.value ?? null
 }
 
+/** The activated unlock code (used to derive the USB check-in encryption key). */
+export function getUnlockCode(): string | null {
+  return storedCode()
+}
+
 /** True if this machine has already been unlocked with a code matching the current hash. */
 export function isActivated(): boolean {
   const code = storedCode()

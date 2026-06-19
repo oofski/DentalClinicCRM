@@ -28,6 +28,7 @@ import { emailPdf } from './email'
 import { startKioskServer, stopKioskServer, kioskServerStatus } from './kioskServer'
 import { checkForUpdates, downloadUpdate, quitAndInstall, getUpdateStatus } from './updater'
 import { isActivated, activate } from './license'
+import { saveCheckInToUsb, importCheckInsFromUsb } from './checkinTransfer'
 import { join } from 'node:path'
 import type {
   User,
@@ -758,26 +759,35 @@ export function registerIpc(): void {
   }))
 
   // ---------------- Kiosk window ----------------
-  ipcMain.handle('kiosk:open', () => {
-    openKioskWindow()
+  ipcMain.handle('kiosk:open', (_e, mode?: string) => {
+    openKioskWindow(mode === 'offline' ? 'offline' : 'local')
     return ok(true)
+  })
+
+  // ---------------- Offline (USB) check-in transfer ----------------
+  ipcMain.handle('checkin:saveBundle', (_e, bundle: unknown) =>
+    saveCheckInToUsb(bundle as never)
+  )
+  ipcMain.handle('checkin:importFromUsb', () => {
+    const u = requireUser()
+    return importCheckInsFromUsb(u.id, u.full_name)
   })
 }
 
 let kioskWin: BrowserWindow | null = null
-let buildKioskWindow: (() => BrowserWindow) | null = null
+let buildKioskWindow: ((mode: string) => BrowserWindow) | null = null
 
-export function setKioskFactory(factory: () => BrowserWindow): void {
+export function setKioskFactory(factory: (mode: string) => BrowserWindow): void {
   buildKioskWindow = factory
 }
 
-function openKioskWindow(): void {
+function openKioskWindow(mode: string): void {
   if (kioskWin && !kioskWin.isDestroyed()) {
     kioskWin.focus()
     return
   }
   if (!buildKioskWindow) return
-  kioskWin = buildKioskWindow()
+  kioskWin = buildKioskWindow(mode)
   kioskWin.on('closed', () => {
     kioskWin = null
   })

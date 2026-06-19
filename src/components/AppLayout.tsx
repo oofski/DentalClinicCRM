@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/store/auth'
+import { useSession } from '@/store/session'
 import { api } from '@/lib/api'
 import type { Patient, ClinicEvent } from '@shared/types'
 import { LogoPlate } from './Logo'
@@ -89,6 +90,7 @@ function GlobalSearch() {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth()
+  const mode = useSession((s) => s.mode)
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
@@ -165,6 +167,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
         {navItem('/', 'home', 'Dashboard')}
         {navItem('/patients', 'users', 'Patients')}
+        {navItem('/checkin', 'kiosk', 'Check-In')}
         {navItem('/events', 'doc', 'Events')}
         {navItem('/settings', 'settings', 'Settings')}
 
@@ -172,12 +175,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <button
             className="btn btn-sm"
             style={{ width: '100%', background: 'rgba(255,255,255,0.1)', color: '#fff', borderColor: 'transparent' }}
-            onClick={async () => {
-              await api.kiosk.open()
-              toast.push('Patient Check-In window opened', 'success')
-            }}
+            onClick={() => navigate('/checkin')}
           >
-            <Icon name="kiosk" size={16} /> Patient Check-In
+            <Icon name="kiosk" size={16} /> Start Check-In
           </button>
         </div>
 
@@ -213,6 +213,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <div className="topbar">
           <GlobalSearch />
           <div className="row" style={{ gap: 10 }}>
+            <span
+              className="pill gray clickable"
+              title="Check-in mode (set at sign-in). Click to manage."
+              onClick={() => navigate('/checkin')}
+            >
+              {mode === 'online' ? '🌐 Online' : '🔌 Offline'}
+            </span>
             {activeEvent && (
               <span
                 className="pill azure clickable"

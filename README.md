@@ -68,6 +68,12 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 ### New in v1.2.6
 - **License gate (offline, no server)** — each computer must enter a one-time **unlock code** before the app can be used. The installer stays freely downloadable but is inert without the code, so you control who can actually run it — and the repo can stay public (auto-update keeps working). Only the bcrypt *hash* of the code lives in the repo; change the code anytime with `node scripts/make-unlock-hash.mjs "NEW-CODE"` and paste the hash into `electron/main/license.ts`.
 
+### New in v1.2.7
+- **Online / Offline check-in modes** — pick a mode right on the **sign-in screen** (and switch any time from the new **Check-In** page or the mode pill in the top bar).
+  - **🌐 Online** — the existing tablet flow: a tablet on the **same wifi/hotspot (no internet)** scans the QR code or opens the link, and the patient appears in the app instantly with a signed consent.
+  - **🔌 Offline (USB)** — no network at all. The patient checks in on any computer running the app and clicks **Save to Flash Drive**; you carry the USB drive to the doctor's computer and click **Import from Flash Drive** to pull the patient and signed consent in. Each file is **encrypted with your unlock code** (AES‑256‑GCM), so a lost drive is unreadable.
+- **Check-In hub** — a dedicated page consolidates both modes plus a "use this computer as a station" option (online or USB), replacing the old *Settings → Tablet Check-In* panel.
+
 ## Sign-in accounts
 
 A fresh install bootstraps with a **single administrator** account:
