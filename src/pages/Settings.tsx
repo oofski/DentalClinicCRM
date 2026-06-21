@@ -26,6 +26,7 @@ export default function Settings() {
   const [savingClinic, setSavingClinic] = useState(false)
   const [savingSmtp, setSavingSmtp] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  const [pwUser, setPwUser] = useState<User | null>(null)
   const [info, setInfo] = useState<{ dataDir: string } | null>(null)
 
   // change password
@@ -202,20 +203,25 @@ export default function Settings() {
                   <td>{u.username}</td>
                   <td style={{ textTransform: 'capitalize' }}>{u.role.replace('_', ' ')}</td>
                   <td style={{ textAlign: 'right' }}>
-                    {u.id !== me?.id && (
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={async () => {
-                          const res = await api.users.deactivate(u.id)
-                          if (res.ok) {
-                            toast.push('Account removed', 'success')
-                            reloadUsers()
-                          } else toast.push(res.error || 'Failed', 'error')
-                        }}
-                      >
-                        Remove
+                    <div className="row" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                      <button className="btn btn-sm" onClick={() => setPwUser(u)}>
+                        Set Password
                       </button>
-                    )}
+                      {u.id !== me?.id && (
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={async () => {
+                            const res = await api.users.deactivate(u.id)
+                            if (res.ok) {
+                              toast.push('Account removed', 'success')
+                              reloadUsers()
+                            } else toast.push(res.error || 'Failed', 'error')
+                          }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -338,6 +344,7 @@ export default function Settings() {
       <AboutCard />
 
       <AddUserModal open={addOpen} onClose={() => setAddOpen(false)} onAdded={reloadUsers} />
+      <SetPasswordModal user={pwUser} onClose={() => setPwUser(null)} />
     </div>
   )
 }
@@ -377,20 +384,47 @@ function AddUserModal({
   onAdded: () => void
 }) {
   const toast = useToast()
-  const [form, setForm] = useState({ fullName: '', username: '', role: 'doctor' as Role, password: '' })
+  const empty = { fullName: '', username: '', role: 'doctor' as Role, password: '' }
+  const [form, setForm] = useState(empty)
+  const [showPw, setShowPw] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  // Reset the form each time the modal is opened.
+  useEffect(() => {
+    if (open) {
+      setForm(empty)
+      setShowPw(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const fullName = form.fullName.trim()
+  const username = form.username.trim().toLowerCase()
+  const valid = fullName.length > 0 && username.length > 0 && form.password.length >= 6
+
   const submit = async () => {
-    if (!form.fullName.trim() || !form.username.trim() || form.password.length < 6) {
-      toast.push('Fill all fields (password ≥ 6 chars)', 'error')
+    if (!valid) {
+      toast.push('Enter a name, a username, and a password of at least 6 characters', 'error')
       return
     }
-    const res = await api.users.create(form)
-    if (res.ok) {
-      toast.push('Account created', 'success')
-      onAdded()
-      onClose()
-      setForm({ fullName: '', username: '', role: 'doctor', password: '' })
-    } else toast.push(res.error || 'Failed', 'error')
+    setBusy(true)
+    try {
+      const res = await api.users.create({ ...form, fullName, username })
+      if (res.ok) {
+        toast.push(`Account “${username}” created`, 'success')
+        onAdded()
+        onClose()
+        setForm(empty)
+      } else {
+        toast.push(res.error || 'Could not create the account', 'error')
+      }
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : 'Could not create the account', 'error')
+    } finally {
+      setBusy(false)
+    }
   }
+
   return (
     <Modal
       open={open}
@@ -398,20 +432,31 @@ function AddUserModal({
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>
+          <button className="btn" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={submit}>
-            Create Account
+          <button className="btn btn-primary" onClick={submit} disabled={busy || !valid}>
+            {busy ? 'Creating…' : 'Create Account'}
           </button>
         </>
       }
     >
       <Field label="Full Name">
-        <input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
+        <input
+          autoFocus
+          placeholder="e.g. Dr. Anna Seitz"
+          value={form.fullName}
+          onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+        />
       </Field>
       <Field label="Username">
-        <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase() })} />
+        <input
+          placeholder="e.g. aseitz"
+          value={form.username}
+          onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase() })}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+        />
       </Field>
       <div className="grid-2">
         <Field label="Role">
@@ -421,10 +466,97 @@ function AddUserModal({
             <option value="admin">Administrator</option>
           </select>
         </Field>
-        <Field label="Temporary Password">
-          <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        <Field label="Password">
+          <input
+            type={showPw ? 'text' : 'password'}
+            placeholder="At least 6 characters"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && submit()}
+          />
         </Field>
       </div>
+      <label className="row" style={{ gap: 8, alignItems: 'center', fontSize: 13, marginTop: 4 }}>
+        <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} style={{ width: 'auto' }} />
+        Show password
+      </label>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>
+        The username and password are what this person types to sign in. They can change their
+        password later from <b>Settings → Change My Password</b>.
+      </p>
+    </Modal>
+  )
+}
+
+function SetPasswordModal({ user, onClose }: { user: User | null; onClose: () => void }) {
+  const toast = useToast()
+  const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (user) {
+      setPassword('')
+      setShowPw(false)
+    }
+  }, [user])
+
+  const submit = async () => {
+    if (!user) return
+    if (password.length < 6) {
+      toast.push('Password must be at least 6 characters', 'error')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await api.users.setPassword(user.id, password)
+      if (res.ok) {
+        toast.push(`Password updated for ${user.username}`, 'success')
+        onClose()
+      } else {
+        toast.push(res.error || 'Could not set the password', 'error')
+      }
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : 'Could not set the password', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={!!user}
+      title={user ? `Set Password — ${user.full_name}` : 'Set Password'}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={submit} disabled={busy || password.length < 6}>
+            {busy ? 'Saving…' : 'Save Password'}
+          </button>
+        </>
+      }
+    >
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        Set a new password for <b>{user?.username}</b>. They can sign in with it right away — no need
+        to know their old password.
+      </p>
+      <Field label="New Password">
+        <input
+          autoFocus
+          type={showPw ? 'text' : 'password'}
+          placeholder="At least 6 characters"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+        />
+      </Field>
+      <label className="row" style={{ gap: 8, alignItems: 'center', fontSize: 13, marginTop: 4 }}>
+        <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} style={{ width: 'auto' }} />
+        Show password
+      </label>
     </Modal>
   )
 }

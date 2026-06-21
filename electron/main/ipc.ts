@@ -92,14 +92,52 @@ export function registerIpc(): void {
     (_e, args: { username: string; fullName: string; role: Role; password: string }) => {
       const u = requireUser()
       if (u.role !== 'admin') return { ok: false, error: 'Only administrators can add users' }
-      if (Users.getRawByUsername(args.username)) {
-        return { ok: false, error: 'That username already exists' }
+
+      const username = (args?.username || '').trim().toLowerCase()
+      const fullName = (args?.fullName || '').trim()
+      const password = args?.password || ''
+      const role = args?.role
+      if (!username) return { ok: false, error: 'Enter a username' }
+      if (!fullName) return { ok: false, error: 'Enter the full name' }
+      if (password.length < 6) return { ok: false, error: 'Password must be at least 6 characters' }
+      if (!['doctor', 'front_desk', 'admin'].includes(role)) return { ok: false, error: 'Pick a role' }
+
+      try {
+        const existing = Users.getAnyByUsername(username)
+        if (existing && existing.active) {
+          return { ok: false, error: 'That username already exists' }
+        }
+        if (existing && !existing.active) {
+          // The username was used by a removed account — revive it with the new details
+          // instead of hitting the UNIQUE constraint (which used to fail silently).
+          Users.reactivate(existing.id, hashPassword(password), fullName, role)
+          Audit.log(u.id, null, 'create_user', `Re-created ${username} (${role})`)
+          return ok(Users.getById(existing.id))
+        }
+        const id = Users.create(username, hashPassword(password), fullName, role)
+        Audit.log(u.id, null, 'create_user', `Created ${username} (${role})`)
+        return ok(Users.getById(id))
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'Could not create the account' }
       }
-      const id = Users.create(args.username, hashPassword(args.password), args.fullName, args.role)
-      Audit.log(u.id, null, 'create_user', `Created ${args.username} (${args.role})`)
-      return ok(Users.getById(id))
     }
   )
+
+  // Admin sets/resets another user's password (no need to know the old one).
+  ipcMain.handle('users:setPassword', (_e, id: number, newPw: string) => {
+    const u = requireUser()
+    if (u.role !== 'admin') return { ok: false, error: 'Only administrators can reset passwords' }
+    if (!newPw || newPw.length < 6) return { ok: false, error: 'Password must be at least 6 characters' }
+    const target = Users.getById(id)
+    if (!target) return { ok: false, error: 'User not found' }
+    try {
+      Users.updatePassword(id, hashPassword(newPw))
+      Audit.log(u.id, null, 'reset_password', `Reset password for ${target.username}`)
+      return ok(true)
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Could not set the password' }
+    }
+  })
 
   ipcMain.handle('users:deactivate', (_e, id: number) => {
     const u = requireUser()

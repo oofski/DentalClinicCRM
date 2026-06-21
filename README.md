@@ -74,6 +74,10 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
   - **🔌 Offline (USB)** — no network at all. The patient checks in on any computer running the app and clicks **Save to Flash Drive**; you carry the USB drive to the doctor's computer and click **Import from Flash Drive** to pull the patient and signed consent in. Each file is **encrypted with your unlock code** (AES‑256‑GCM), so a lost drive is unreadable.
 - **Check-In hub** — a dedicated page consolidates both modes plus a "use this computer as a station" option (online or USB), replacing the old *Settings → Tablet Check-In* panel.
 
+### New in v1.2.8
+- **Reliable user creation** — fixed *Settings → Provider & Staff Accounts → Add Account* failing silently. Creating a login now validates clearly (name, username, password ≥ 6 chars), shows a **Show password** option, reports any problem with a message instead of doing nothing, and **reusing a removed username** revives that account instead of hitting a hidden database error.
+- **Set / reset a password** — admins can set a new password for any existing user from the accounts list (**Set Password**), without needing the old one — handy when a staff member is locked out.
+
 ## Sign-in accounts
 
 A fresh install bootstraps with a **single administrator** account:

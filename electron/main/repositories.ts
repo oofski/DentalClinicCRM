@@ -110,13 +110,29 @@ export const Users = {
     return r ? mapUser(r) : undefined
   },
   getRawByUsername(username: string): any | undefined {
-    return queryOne('SELECT * FROM users WHERE username = ? AND active = 1', [username.toLowerCase()])
+    return queryOne('SELECT * FROM users WHERE username = ? AND active = 1', [
+      username.trim().toLowerCase()
+    ])
+  },
+  // Like getRawByUsername but ignores `active`, so duplicate checks also catch a
+  // previously-removed account (the username column is globally UNIQUE in SQLite).
+  getAnyByUsername(username: string): any | undefined {
+    return queryOne('SELECT * FROM users WHERE username = ?', [username.trim().toLowerCase()])
   },
   create(username: string, passwordHash: string, fullName: string, role: Role): number {
     return executeReturningId(
       'INSERT INTO users (username, password_hash, full_name, role) VALUES (?,?,?,?)',
-      [username.toLowerCase(), passwordHash, fullName, role]
+      [username.trim().toLowerCase(), passwordHash, fullName, role]
     )
+  },
+  // Revive a removed account in place (reusing its row keeps the UNIQUE username happy).
+  reactivate(id: number, passwordHash: string, fullName: string, role: Role): void {
+    execute('UPDATE users SET active = 1, password_hash = ?, full_name = ?, role = ? WHERE id = ?', [
+      passwordHash,
+      fullName,
+      role,
+      id
+    ])
   },
   updatePassword(id: number, passwordHash: string): void {
     execute('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id])

@@ -18,6 +18,7 @@ const api = {
     list: () => invoke('users:list'),
     create: (args: { username: string; fullName: string; role: string; password: string }) =>
       invoke('users:create', args),
+    setPassword: (id: number, password: string) => invoke('users:setPassword', id, password),
     deactivate: (id: number) => invoke('users:deactivate', id)
   },
   patients: {

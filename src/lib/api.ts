@@ -49,6 +49,7 @@ export interface Api {
       role: Role
       password: string
     }): Promise<{ ok: boolean; error?: string; data?: User }>
+    setPassword(id: number, password: string): Promise<{ ok: boolean; error?: string }>
     deactivate(id: number): Promise<{ ok: boolean; error?: string }>
   }
   patients: {
