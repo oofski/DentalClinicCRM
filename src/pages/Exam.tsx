@@ -7,16 +7,68 @@ import type {
   Patient,
   ClinicalNote,
   ToothChartData,
+  ToothState,
   TreatmentItem,
   NoteType,
   TreatmentPriority
 } from '@shared/types'
+import {
+  CONDITION_LABELS,
+  SURFACES,
+  SURFACE_ABBR,
+  AUTO_NOTE_IGNORED,
+  RECOMMENDED_TREATMENTS,
+  TREATMENT_TIMELINES
+} from '@shared/dental'
 import { ToothChart } from '@/components/ToothChart'
 import { toothChartSvgString } from '@/components/toothGeometry'
 import { Icon } from '@/components/icons'
 import { useToast } from '@/components/ui'
 import { DictateButton } from '@/components/Dictate'
 import { formatDate } from '@/lib/format'
+
+// ---- Auto-charting → clinical notes (v1.2.9) --------------------------------
+// A tagged tooth (anything other than Unexamined/Healthy) gets one auto-generated
+// "finding" note. Format: "#14 — Cavity (surfaces: M, O) — <quick note>".
+function formatAutoNoteLine(n: number, st: ToothState): string {
+  let line = `#${n} — ${CONDITION_LABELS[st.condition]}`
+  const abbrs = SURFACES.filter((s) => st.surfaces.includes(s.key)).map((s) => SURFACE_ABBR[s.key])
+  if (abbrs.length) line += ` (surfaces: ${abbrs.join(', ')})`
+  const note = (st.note || '').trim()
+  if (note) line += ` — ${note}`
+  return line
+}
+
+// A note is tooth n's auto-note iff it's an untouched, single-tooth finding we wrote.
+// The moment a doctor edits it (edited=1) it drops out of auto-management forever,
+// so their wording is never clobbered. Manual composer notes have linked_teeth=[]
+// so they never match.
+function isAutoNoteFor(note: ClinicalNote, n: number): boolean {
+  return (
+    note.note_type === 'finding' &&
+    !note.edited &&
+    note.linked_teeth.length === 1 &&
+    note.linked_teeth[0] === n &&
+    note.content.startsWith(`#${n} — `)
+  )
+}
+
+function normToothState(s: ToothState | undefined): ToothState {
+  return s || { condition: 'unexamined', surfaces: [], note: '' }
+}
+
+function sameToothState(a: ToothState | undefined, b: ToothState | undefined): boolean {
+  const x = normToothState(a)
+  const y = normToothState(b)
+  return (
+    x.condition === y.condition &&
+    (x.note || '') === (y.note || '') &&
+    [...x.surfaces].sort().join(',') === [...y.surfaces].sort().join(',')
+  )
+}
+
+const isNotableTooth = (st: ToothState | undefined) =>
+  !!st && !AUTO_NOTE_IGNORED.includes(st.condition)
 
 const NOTE_TYPES: { key: NoteType; label: string }[] = [
   { key: 'finding', label: 'Examination Finding' },
@@ -59,17 +111,62 @@ export default function Exam() {
   const [noteType, setNoteType] = useState<NoteType>('finding')
   const [noteText, setNoteText] = useState('')
 
+  // Snapshot of the last-reconciled chart, so auto-notes are diffed (not rebuilt).
+  const prevChartRef = useRef<ToothChartData>({})
+
   useEffect(() => {
     ;(async () => {
       const e = await api.exams.get(eid)
       if (!e) return
       setExam(e)
-      setChart(e.tooth_chart_data || {})
+      const loaded = e.tooth_chart_data || {}
+      prevChartRef.current = loaded
+      setChart(loaded)
       setPatient((await api.patients.get(e.patient_id)) || null)
       setNotes(await api.notes.listByExam(eid))
       setItems(await api.exams.treatmentItems(eid))
     })()
   }, [eid])
+
+  // Reconcile auto-generated clinical notes against the current tooth chart.
+  // Runs inside the debounced chart save so rapid edits don't thrash the notes list.
+  const reconcileAutoNotes = async (prev: ToothChartData, next: ToothChartData) => {
+    const nums = new Set<number>()
+    Object.keys(prev).forEach((k) => nums.add(Number(k)))
+    Object.keys(next).forEach((k) => nums.add(Number(k)))
+    const changed: number[] = []
+    nums.forEach((n) => {
+      if (!sameToothState(prev[n], next[n])) changed.push(n)
+    })
+    if (changed.length === 0) return
+    // Bulk op (Mark-all / paint / reset): clean up removed tags but don't spawn a
+    // note for every tooth — auto-notes are for individually tagged teeth.
+    const bulk = changed.length > 8
+    const existing = await api.notes.listByExam(eid)
+    let mutated = false
+    for (const n of changed) {
+      const st = next[n]
+      const auto = existing.find((note) => isAutoNoteFor(note, n))
+      if (isNotableTooth(st)) {
+        const line = formatAutoNoteLine(n, st as ToothState)
+        if (auto) {
+          if (auto.content !== line) {
+            await api.notes.delete(auto.id)
+            await api.notes.create(eid, 'finding', line, [n])
+            mutated = true
+          }
+        } else if (!bulk) {
+          await api.notes.create(eid, 'finding', line, [n])
+          mutated = true
+        }
+      } else if (auto) {
+        // Tooth reverted to Healthy/Unexamined — retire its auto-note.
+        await api.notes.delete(auto.id)
+        mutated = true
+      }
+    }
+    if (mutated) setNotes(await api.notes.listByExam(eid))
+  }
 
   // Auto-save tooth chart
   const firstChart = useRef(true)
@@ -80,6 +177,8 @@ export default function Exam() {
     }
     const t = setTimeout(async () => {
       await api.exams.saveChart(eid, chart)
+      await reconcileAutoNotes(prevChartRef.current, chart)
+      prevChartRef.current = chart
       flagSaved()
     }, 600)
     return () => clearTimeout(t)
@@ -125,6 +224,27 @@ export default function Exam() {
 
   const removeItem = (id: string) => setItems((prev) => prev.filter((i) => i.id !== id))
 
+  // Push a clinical note into the Treatment Plan as a new item (doctor then picks
+  // a recommended treatment + timeline). De-dupes on the note text.
+  const noteToPlan = (note: ClinicalNote) => {
+    setItems((prev) => {
+      if (prev.some((i) => (i.details || '') === note.content)) return prev
+      return [
+        ...prev,
+        {
+          id: uid(),
+          description: '',
+          tooth: note.linked_teeth.join(', '),
+          priority: 'routine',
+          estimate: '',
+          cost: '',
+          details: note.content
+        }
+      ]
+    })
+    toast.push('Added to Treatment Plan — choose a recommended treatment', 'success')
+  }
+
   const generate = async () => {
     setBusy(true)
     try {
@@ -138,7 +258,7 @@ export default function Exam() {
       })
       if (res.ok && res.pdfPath) {
         setLastReport(res.pdfPath)
-        toast.push('Treatment report generated', 'success')
+        toast.push('Additional notes generated', 'success')
         if (approve) setExam((e) => (e ? { ...e, status: 'completed' } : e))
       } else {
         toast.push(res.error || 'Failed to generate report', 'error')
@@ -232,6 +352,7 @@ export default function Exam() {
                   note={n}
                   readOnly={!canClinical}
                   onChange={() => flagSaved()}
+                  onToPlan={canClinical ? () => noteToPlan(n) : undefined}
                   onDelete={async () => {
                     await api.notes.delete(n.id)
                     setNotes(await api.notes.listByExam(eid))
@@ -261,12 +382,32 @@ export default function Exam() {
               {items.map((it) => (
                 <div key={it.id} className="card" style={{ padding: 12, boxShadow: 'none' }}>
                   <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-                    <input
-                      placeholder="Recommended treatment"
-                      value={it.description}
+                    <select
+                      style={{ flex: 1 }}
+                      value={
+                        RECOMMENDED_TREATMENTS.includes(it.description)
+                          ? it.description
+                          : it.description
+                          ? '__legacy__'
+                          : ''
+                      }
                       disabled={!canClinical}
-                      onChange={(e) => updateItem(it.id, { description: e.target.value })}
-                    />
+                      onChange={(e) =>
+                        updateItem(it.id, {
+                          description: e.target.value === '__legacy__' ? it.description : e.target.value
+                        })
+                      }
+                    >
+                      <option value="">Recommended treatment…</option>
+                      {it.description && !RECOMMENDED_TREATMENTS.includes(it.description) && (
+                        <option value="__legacy__">{it.description}</option>
+                      )}
+                      {RECOMMENDED_TREATMENTS.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
                     {canClinical && (
                       <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => removeItem(it.id)}>
                         ✕
@@ -289,13 +430,39 @@ export default function Exam() {
                       <option value="important">Important</option>
                       <option value="routine">Routine</option>
                     </select>
-                    <input
-                      placeholder="Timeline"
-                      value={it.estimate}
+                    <select
+                      value={
+                        TREATMENT_TIMELINES.includes(it.estimate)
+                          ? it.estimate
+                          : it.estimate
+                          ? '__legacy__'
+                          : ''
+                      }
                       disabled={!canClinical}
-                      onChange={(e) => updateItem(it.id, { estimate: e.target.value })}
-                    />
+                      onChange={(e) =>
+                        updateItem(it.id, {
+                          estimate: e.target.value === '__legacy__' ? it.estimate : e.target.value
+                        })
+                      }
+                    >
+                      <option value="">Timeline…</option>
+                      {it.estimate && !TREATMENT_TIMELINES.includes(it.estimate) && (
+                        <option value="__legacy__">{it.estimate}</option>
+                      )}
+                      {TREATMENT_TIMELINES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+                  <input
+                    style={{ marginTop: 8 }}
+                    placeholder="Details / notes (optional)"
+                    value={it.details || ''}
+                    disabled={!canClinical}
+                    onChange={(e) => updateItem(it.id, { details: e.target.value })}
+                  />
                   <input
                     style={{ marginTop: 8 }}
                     placeholder="Estimated cost (optional)"
@@ -314,11 +481,11 @@ export default function Exam() {
       {canClinical && (
         <div className="card">
           <div className="card-title">
-            Treatment Report
+            Additional Notes
             <DictateButton />
           </div>
           <div className="field">
-            <label>Report summary (optional)</label>
+            <label>Summary (optional)</label>
             <textarea
               placeholder="Overall summary for the patient report…"
               value={summary}
@@ -340,7 +507,7 @@ export default function Exam() {
                 <Icon name="print" size={16} /> Print
               </button>
               <button className="btn btn-primary" disabled={busy} onClick={generate}>
-                <Icon name="doc" size={16} /> {busy ? 'Generating…' : 'Generate Report (PDF)'}
+                <Icon name="doc" size={16} /> {busy ? 'Generating…' : 'Generate PDF'}
               </button>
             </div>
           </div>
@@ -348,7 +515,7 @@ export default function Exam() {
           {lastReport && (
             <div className="alert success" style={{ marginTop: 14 }}>
               <div className="row between wrap" style={{ gap: 10 }}>
-                <span>✓ Report saved to the patient record.</span>
+                <span>✓ Saved to the patient record.</span>
                 <div className="row wrap" style={{ gap: 8 }}>
                   <button className="btn btn-sm" onClick={() => api.doc.open(lastReport)}>
                     <Icon name="print" size={14} /> Open / Print
@@ -386,12 +553,14 @@ function NoteRow({
   note,
   readOnly,
   onChange,
-  onDelete
+  onDelete,
+  onToPlan
 }: {
   note: ClinicalNote
   readOnly: boolean
   onChange: () => void
   onDelete: () => void
+  onToPlan?: () => void
 }) {
   const [content, setContent] = useState(note.content)
   const [teeth, setTeeth] = useState(note.linked_teeth.join(', '))
@@ -420,11 +589,18 @@ function NoteRow({
     <div style={{ borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
       <div className="row between">
         <span className="pill azure">{label}</span>
-        {!readOnly && (
-          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={onDelete}>
-            Delete
-          </button>
-        )}
+        <div className="row" style={{ gap: 4 }}>
+          {onToPlan && !readOnly && (
+            <button className="btn btn-ghost btn-sm" onClick={onToPlan} title="Add this note to the Treatment Plan">
+              <Icon name="plus" size={13} /> To plan
+            </button>
+          )}
+          {!readOnly && (
+            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={onDelete}>
+              Delete
+            </button>
+          )}
+        </div>
       </div>
       <textarea
         style={{ marginTop: 6, minHeight: 56 }}

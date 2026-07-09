@@ -163,7 +163,11 @@ export function buildReportHtml(input: ReportRenderInput): string {
       (i) => `<tr>
         <td><span class="badge ${esc(i.priority)}">${esc(t.priority[i.priority])}</span></td>
         <td>${esc(i.tooth || '—')}</td>
-        <td>${esc(i.description)}</td>
+        <td>${esc(i.description || '—')}${
+          i.details && i.details.trim()
+            ? `<div style="font-size:10.5px;color:#667;margin-top:2px">${esc(i.details.trim())}</div>`
+            : ''
+        }</td>
         <td>${esc(i.estimate || '—')}</td>
         ${showCost ? `<td>${esc(i.cost || '—')}</td>` : ''}
       </tr>`

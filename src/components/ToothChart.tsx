@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   CONDITIONS,
   SURFACES,
+  SURFACE_ABBR,
   CONDITION_LABELS,
   CONDITION_COLORS,
   emptyToothState,
@@ -253,7 +254,7 @@ export function ToothChart({
 
             <div className="field">
               <label>Condition</label>
-              <div className="row wrap" style={{ gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                 {CONDITIONS.map((c) => (
                   <button
                     key={c.key}
@@ -261,7 +262,9 @@ export function ToothChart({
                     disabled={readOnly}
                     onClick={() => update(selected, { condition: c.key })}
                     style={{
-                      gap: 6,
+                      gap: 7,
+                      justifyContent: 'flex-start',
+                      minHeight: 34,
                       borderColor: sel.condition === c.key ? COLORS.azure : undefined,
                       background: sel.condition === c.key ? COLORS.azureSoft : undefined
                     }}
@@ -273,7 +276,8 @@ export function ToothChart({
                         borderRadius: 3,
                         background: c.color,
                         border: '1px solid rgba(0,0,0,0.2)',
-                        display: 'inline-block'
+                        display: 'inline-block',
+                        flexShrink: 0
                       }}
                     />
                     {c.label}
@@ -284,7 +288,7 @@ export function ToothChart({
 
             <div className="field">
               <label>Surfaces affected</label>
-              <div className="row wrap" style={{ gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
                 {SURFACES.map((s) => {
                   const on = sel.surfaces.includes(s.key)
                   return (
@@ -292,7 +296,7 @@ export function ToothChart({
                       key={s.key}
                       className="btn btn-sm"
                       disabled={readOnly}
-                      title={s.hint}
+                      title={`${s.label} — ${s.hint}`}
                       onClick={() => {
                         const surfaces = on
                           ? sel.surfaces.filter((x) => x !== s.key)
@@ -300,18 +304,23 @@ export function ToothChart({
                         update(selected, { surfaces })
                       }}
                       style={{
+                        flexDirection: 'column',
+                        gap: 1,
+                        padding: '6px 2px',
+                        lineHeight: 1.1,
                         borderColor: on ? COLORS.azure : undefined,
                         background: on ? COLORS.azureSoft : undefined
                       }}
                     >
-                      {s.label}
+                      <span style={{ fontSize: 14, fontWeight: 700 }}>{SURFACE_ABBR[s.key]}</span>
+                      <span style={{ fontSize: 9.5, opacity: 0.72 }}>{s.label}</span>
                     </button>
                   )
                 })}
               </div>
             </div>
 
-            <div className="field">
+            <div className="field" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
               <label>Quick note</label>
               <textarea
                 value={sel.note}

@@ -96,6 +96,7 @@ export interface TreatmentItem {
   priority: TreatmentPriority
   estimate: string // estimated timeline e.g. "Within 2 weeks"
   cost?: string
+  details?: string // free-text specifics, e.g. pulled from a clinical note
 }
 
 export interface ConsentForm {

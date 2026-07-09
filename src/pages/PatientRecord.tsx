@@ -154,7 +154,7 @@ export default function PatientRecord() {
             <div className="card-title">At a glance</div>
             <Detail k="Examinations" v={String(rec.exams.length)} />
             <Detail k="Signed consents" v={String(rec.consents.length)} />
-            <Detail k="Treatment reports" v={String(rec.reports.length)} />
+            <Detail k="Additional notes" v={String(rec.reports.length)} />
             <Detail k="Referrals" v={String(rec.referrals.length)} />
             <Detail k="Images" v={String(rec.images.length)} />
             <div className="row" style={{ alignItems: 'center', padding: '7px 0', gap: 10 }}>
@@ -218,7 +218,7 @@ export default function PatientRecord() {
                 {rec.reports.map((r) => (
                   <tr key={`r${r.id}`}>
                     <td>
-                      <span className="pill azure">Treatment Report</span>
+                      <span className="pill azure">Additional Notes</span>
                     </td>
                     <td>{formatDateTime(r.created_at)}</td>
                     <td>{r.approved_at ? `Approved by ${r.approved_by_name}` : 'Draft'}</td>

@@ -80,7 +80,7 @@ export function buildSummaryHtml(input: SummaryRenderInput): string {
       `<tr><td>Consent (${esc(cf.language)})</td><td>${formatDateTime(cf.signed_at)}</td></tr>`
     )
   for (const r of input.reports)
-    docRows.push(`<tr><td>Treatment Report</td><td>${formatDateTime(r.created_at)}</td></tr>`)
+    docRows.push(`<tr><td>Additional Notes</td><td>${formatDateTime(r.created_at)}</td></tr>`)
 
   const body = `<div class="doc">
     ${header}

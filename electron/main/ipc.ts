@@ -359,7 +359,7 @@ export function registerIpc(): void {
       })
       const pdf = await renderHtmlToPdf(html)
       const dirs = patientDirs(patient.patient_id)
-      const path = writeFileBuffer(dirs.reports, timestampName('TreatmentReport', 'pdf'), pdf)
+      const path = writeFileBuffer(dirs.reports, timestampName('AdditionalNotes', 'pdf'), pdf)
       const reportId = Reports.create(
         exam.id,
         patient.id,
@@ -414,8 +414,8 @@ export function registerIpc(): void {
       const clinic = Settings.getAll()
       const res = await emailPdf({
         to: args.to,
-        subject: `Your Dental Treatment Report — ${clinic.clinic_name}`,
-        text: `Dear ${args.patientName},\n\nPlease find attached your dental examination and treatment report from ${clinic.clinic_name}.\n\nKind regards,\n${clinic.clinic_name}\n${clinic.phone}`,
+        subject: `Your Dental Report — ${clinic.clinic_name}`,
+        text: `Dear ${args.patientName},\n\nPlease find attached your dental examination report from ${clinic.clinic_name}.\n\nKind regards,\n${clinic.clinic_name}\n${clinic.phone}`,
         attachmentPath: args.pdfPath
       })
       Audit.log(u.id, null, 'email_report', `via ${res.method}`)

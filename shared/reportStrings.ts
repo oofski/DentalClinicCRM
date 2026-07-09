@@ -49,7 +49,7 @@ export interface ReportStrings {
 export const REPORT_STRINGS: Record<Language, ReportStrings> = {
   english: {
     dir: 'ltr',
-    title: 'Dental Examination & Treatment Report',
+    title: 'Dental Examination & Additional Notes',
     patient: 'Patient',
     patientId: 'Patient ID',
     dob: 'Date of Birth',
@@ -107,7 +107,7 @@ export const REPORT_STRINGS: Record<Language, ReportStrings> = {
 
   spanish: {
     dir: 'ltr',
-    title: 'Informe de Examen y Plan de Tratamiento Dental',
+    title: 'Examen Dental y Notas Adicionales',
     patient: 'Paciente',
     patientId: 'ID del Paciente',
     dob: 'Fecha de Nacimiento',
@@ -165,7 +165,7 @@ export const REPORT_STRINGS: Record<Language, ReportStrings> = {
 
   arabic: {
     dir: 'rtl',
-    title: 'تقرير الفحص وخطة العلاج السني',
+    title: 'الفحص السني والملاحظات الإضافية',
     patient: 'المريض',
     patientId: 'رقم المريض',
     dob: 'تاريخ الميلاد',

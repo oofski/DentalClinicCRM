@@ -102,6 +102,44 @@ export const SURFACES: { key: SurfaceKey; label: string; hint: string }[] = [
   { key: 'distal', label: 'Distal', hint: 'Back-facing side' }
 ]
 
+// Single-letter surface abbreviations used in auto-generated clinical-note lines
+// (e.g. "#14 — Cavity (surfaces: M, O)"). Standard dental charting notation.
+export const SURFACE_ABBR: Record<SurfaceKey, string> = {
+  occlusal: 'O',
+  buccal: 'B',
+  lingual: 'L',
+  mesial: 'M',
+  distal: 'D'
+}
+
+// Conditions that carry no clinical finding — auto-notes skip these teeth.
+export const AUTO_NOTE_IGNORED: ToothConditionKey[] = ['unexamined', 'healthy']
+
+// Generic recommended-treatment picklist for the Treatment Plan.
+export const RECOMMENDED_TREATMENTS = [
+  'Filling',
+  'Crown',
+  'Root Canal',
+  'Extraction',
+  'Implant',
+  'Cleaning',
+  'Scaling & Polishing',
+  'Night Guard',
+  'Referral',
+  'Follow-up',
+  'Other'
+]
+
+// Generic timeline picklist for the Treatment Plan.
+export const TREATMENT_TIMELINES = [
+  'ASAP',
+  'Within 2 weeks',
+  'Within 1 month',
+  'Within 3 months',
+  'Within 6 months',
+  'Elective / monitor'
+]
+
 export function emptyToothState() {
   return { condition: 'unexamined' as ToothConditionKey, surfaces: [] as SurfaceKey[], note: '' }
 }

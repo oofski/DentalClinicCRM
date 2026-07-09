@@ -78,6 +78,12 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 - **Reliable user creation** — fixed *Settings → Provider & Staff Accounts → Add Account* failing silently. Creating a login now validates clearly (name, username, password ≥ 6 chars), shows a **Show password** option, reports any problem with a message instead of doing nothing, and **reusing a removed username** revives that account instead of hitting a hidden database error.
 - **Set / reset a password** — admins can set a new password for any existing user from the accounts list (**Set Password**), without needing the old one — handy when a staff member is locked out.
 
+### New in v1.2.9 — Doctor charting zone
+- **Auto-charting → Clinical Notes** — when you tag a tooth with a condition (Cavity, Implant, Extraction, …) and/or surfaces, a clinical-notes finding is written automatically, e.g. `#14 — Cavity (surfaces: M, O)`. Teeth left **Healthy or unmarked are ignored**. Reverting a tooth removes its line, and the moment you hand-edit an auto-note it's yours to keep (never overwritten). Bulk "Mark all" won't flood the list.
+- **Clinical Note → Treatment Plan** — each note has a **To plan** button that drops it into the Treatment Plan, where you pick a **Recommended Treatment** (Filling, Crown, Root Canal, Extraction, Referral, …) and a **Timeline** (ASAP → 6 months) from clean dropdowns, plus a free-text details line.
+- **"Treatment Report" is now "Additional Notes"** — renamed across the app, the PDF heading (English/Spanish/Arabic), and the patient record.
+- **Nicer tooth-tagging panel** — the condition and surface pickers are re-laid-out as tidy grids (conditions in two even columns, surfaces as five compact labelled chips) instead of buttons stacked on top of each other.
+
 ## Sign-in accounts
 
 A fresh install bootstraps with a **single administrator** account:
