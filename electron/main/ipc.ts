@@ -270,6 +270,10 @@ export function registerIpc(): void {
     Notes.update(id, content, teeth || [])
     return ok(true)
   })
+  ipcMain.handle('notes:updateAuto', (_e, id: number, content: string, teeth: number[]) => {
+    Notes.updateAuto(id, content, teeth || [])
+    return ok(true)
+  })
   ipcMain.handle('notes:delete', (_e, id: number) => {
     Notes.delete(id)
     return ok(true)

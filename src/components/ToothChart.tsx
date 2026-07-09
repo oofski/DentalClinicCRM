@@ -254,7 +254,7 @@ export function ToothChart({
 
             <div className="field">
               <label>Condition</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
                 {CONDITIONS.map((c) => (
                   <button
                     key={c.key}
@@ -264,6 +264,8 @@ export function ToothChart({
                     style={{
                       gap: 7,
                       justifyContent: 'flex-start',
+                      textAlign: 'left',
+                      whiteSpace: 'normal',
                       minHeight: 34,
                       borderColor: sel.condition === c.key ? COLORS.azure : undefined,
                       background: sel.condition === c.key ? COLORS.azureSoft : undefined

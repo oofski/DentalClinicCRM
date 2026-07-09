@@ -39,20 +39,6 @@ function formatAutoNoteLine(n: number, st: ToothState): string {
   return line
 }
 
-// A note is tooth n's auto-note iff it's an untouched, single-tooth finding we wrote.
-// The moment a doctor edits it (edited=1) it drops out of auto-management forever,
-// so their wording is never clobbered. Manual composer notes have linked_teeth=[]
-// so they never match.
-function isAutoNoteFor(note: ClinicalNote, n: number): boolean {
-  return (
-    note.note_type === 'finding' &&
-    !note.edited &&
-    note.linked_teeth.length === 1 &&
-    note.linked_teeth[0] === n &&
-    note.content.startsWith(`#${n} — `)
-  )
-}
-
 function normToothState(s: ToothState | undefined): ToothState {
   return s || { condition: 'unexamined', surfaces: [], note: '' }
 }
@@ -139,31 +125,58 @@ export default function Exam() {
       if (!sameToothState(prev[n], next[n])) changed.push(n)
     })
     if (changed.length === 0) return
-    // Bulk op (Mark-all / paint / reset): clean up removed tags but don't spawn a
-    // note for every tooth — auto-notes are for individually tagged teeth.
-    const bulk = changed.length > 8
+
     const existing = await api.notes.listByExam(eid)
-    let mutated = false
+    // The finding note that belongs to tooth n (edited or not) — one auto-note per tooth.
+    const findingForTooth = (n: number) =>
+      existing.find(
+        (note) =>
+          note.note_type === 'finding' &&
+          note.linked_teeth.length === 1 &&
+          note.linked_teeth[0] === n &&
+          note.content.startsWith(`#${n} — `)
+      )
+
+    const deletes: number[] = []
+    const updates: { id: number; line: string; n: number }[] = []
+    const creates: { n: number; line: string }[] = []
+
     for (const n of changed) {
       const st = next[n]
-      const auto = existing.find((note) => isAutoNoteFor(note, n))
+      const found = findingForTooth(n)
       if (isNotableTooth(st)) {
         const line = formatAutoNoteLine(n, st as ToothState)
-        if (auto) {
-          if (auto.content !== line) {
-            await api.notes.delete(auto.id)
-            await api.notes.create(eid, 'finding', line, [n])
-            mutated = true
-          }
-        } else if (!bulk) {
-          await api.notes.create(eid, 'finding', line, [n])
-          mutated = true
+        if (found) {
+          // Refresh our auto-note in place (id preserved). A doctor-edited note
+          // (edited=1) is left untouched, and never duplicated.
+          if (!found.edited && found.content !== line) updates.push({ id: found.id, line, n })
+        } else {
+          creates.push({ n, line })
         }
-      } else if (auto) {
-        // Tooth reverted to Healthy/Unexamined — retire its auto-note.
-        await api.notes.delete(auto.id)
-        mutated = true
+      } else if (found && !found.edited) {
+        // Tooth reverted to Healthy/Unexamined — retire our auto-note (never an edited one).
+        deletes.push(found.id)
       }
+    }
+
+    // Bulk paint / Mark-all / reset: don't spawn a note for every tooth. Gauge "bulk" by the
+    // number of NEW notes we'd create, so a mixed batch that only adds a few still gets them.
+    const doCreates = creates.length > 8 ? [] : creates
+
+    let mutated = false
+    for (const id of deletes) {
+      await api.notes.delete(id)
+      mutated = true
+    }
+    for (const u of updates) {
+      // updateAuto is a no-op if the row was edited/removed meanwhile, so a racing
+      // manual edit (700ms) always wins over reconcile (600ms) — no lost edits.
+      await api.notes.updateAuto(u.id, u.line, [u.n])
+      mutated = true
+    }
+    for (const c of doCreates) {
+      await api.notes.create(eid, 'finding', c.line, [c.n])
+      mutated = true
     }
     if (mutated) setNotes(await api.notes.listByExam(eid))
   }
@@ -227,21 +240,22 @@ export default function Exam() {
   // Push a clinical note into the Treatment Plan as a new item (doctor then picks
   // a recommended treatment + timeline). De-dupes on the note text.
   const noteToPlan = (note: ClinicalNote) => {
-    setItems((prev) => {
-      if (prev.some((i) => (i.details || '') === note.content)) return prev
-      return [
-        ...prev,
-        {
-          id: uid(),
-          description: '',
-          tooth: note.linked_teeth.join(', '),
-          priority: 'routine',
-          estimate: '',
-          cost: '',
-          details: note.content
-        }
-      ]
-    })
+    if (items.some((i) => (i.details || '') === note.content)) {
+      toast.push('That note is already in the Treatment Plan', 'info')
+      return
+    }
+    setItems((prev) => [
+      ...prev,
+      {
+        id: uid(),
+        description: '',
+        tooth: note.linked_teeth.join(', '),
+        priority: 'routine',
+        estimate: '',
+        cost: '',
+        details: note.content
+      }
+    ])
     toast.push('Added to Treatment Plan — choose a recommended treatment', 'success')
   }
 
@@ -261,7 +275,7 @@ export default function Exam() {
         toast.push('Additional notes generated', 'success')
         if (approve) setExam((e) => (e ? { ...e, status: 'completed' } : e))
       } else {
-        toast.push(res.error || 'Failed to generate report', 'error')
+        toast.push(res.error || 'Failed to generate the PDF', 'error')
       }
     } finally {
       setBusy(false)
@@ -487,7 +501,7 @@ export default function Exam() {
           <div className="field">
             <label>Summary (optional)</label>
             <textarea
-              placeholder="Overall summary for the patient report…"
+              placeholder="Overall summary for the patient…"
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
             />
@@ -500,7 +514,7 @@ export default function Exam() {
                 checked={approve}
                 onChange={(e) => setApprove(e.target.checked)}
               />
-              Approve &amp; sign report (marks exam complete)
+              Approve &amp; sign (marks exam complete)
             </label>
             <div className="row wrap" style={{ gap: 8 }}>
               <button className="btn" disabled={busy} onClick={printNow}>
@@ -532,7 +546,7 @@ export default function Exam() {
                         patientName: `${patient.first_name} ${patient.last_name}`
                       })
                       toast.push(
-                        r.method === 'smtp' ? 'Report emailed to patient' : 'Mail client opened — attach the revealed PDF',
+                        r.method === 'smtp' ? 'Emailed to patient' : 'Mail client opened — attach the revealed PDF',
                         'success'
                       )
                     }}

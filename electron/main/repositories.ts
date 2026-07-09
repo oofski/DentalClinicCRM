@@ -323,6 +323,16 @@ export const Notes = {
       [content, JSON.stringify(linkedTeeth), id]
     )
   },
+  // System update (auto-charting reconcile): refresh content in place WITHOUT marking
+  // the note as user-edited, and only while it's still unedited — so a doctor's manual
+  // edit is never overwritten. Preserving the row id keeps the React key stable.
+  updateAuto(id: number, content: string, linkedTeeth: number[]): void {
+    execute(
+      `UPDATE clinical_notes SET content = ?, linked_teeth = ?, updated_at = datetime('now')
+       WHERE id = ? AND edited = 0`,
+      [content, JSON.stringify(linkedTeeth), id]
+    )
+  },
   delete(id: number): void {
     execute('DELETE FROM clinical_notes WHERE id = ?', [id])
   },

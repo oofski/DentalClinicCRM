@@ -93,6 +93,8 @@ const api = {
       invoke('notes:create', examId, type, content, teeth),
     update: (id: number, content: string, teeth: number[]) =>
       invoke('notes:update', id, content, teeth),
+    updateAuto: (id: number, content: string, teeth: number[]) =>
+      invoke('notes:updateAuto', id, content, teeth),
     delete: (id: number) => invoke('notes:delete', id),
     listByExam: (examId: number) => invoke('notes:listByExam', examId)
   },

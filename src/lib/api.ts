@@ -136,6 +136,7 @@ export interface Api {
       teeth: number[]
     ): Promise<{ ok: boolean; data: number }>
     update(id: number, content: string, teeth: number[]): Promise<Ok<boolean>>
+    updateAuto(id: number, content: string, teeth: number[]): Promise<Ok<boolean>>
     delete(id: number): Promise<Ok<boolean>>
     listByExam(examId: number): Promise<ClinicalNote[]>
   }
