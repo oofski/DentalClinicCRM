@@ -9,7 +9,6 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
-      - 'scripts/**'
   workflow_dispatch:
 
 concurrency:
@@ -32,7 +31,12 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # `npm install` (not `npm ci`) so a newly added dependency resolves even when
+        # package-lock.json hasn't been regenerated in the same commit.
+        run: npm install --no-audit --no-fund
+
+      - name: Fetch offline speech model (Dental Scribe microphone)
+        run: npm run fetch-models
 
       - name: Build renderer + main
         run: npm run build
@@ -53,7 +57,7 @@ jobs:
       - name: Read app version
         id: ver
         shell: bash
-        run: echo "v=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+        run: echo "v=v$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
         if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/claude/busy-euler-vcFJl' || startsWith(github.ref, 'refs/tags/v')

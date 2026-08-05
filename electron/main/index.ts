@@ -1,5 +1,5 @@
-import { app, BrowserWindow, protocol, Menu, shell } from 'electron'
-import { join } from 'node:path'
+import { app, BrowserWindow, protocol, Menu, shell, session } from 'electron'
+import { join, relative, isAbsolute } from 'node:path'
 import fs from 'node:fs'
 import { initDatabase } from './db'
 import { registerIpc, setKioskFactory } from './ipc'
@@ -15,8 +15,51 @@ protocol.registerSchemesAsPrivileged([
   {
     scheme: 'gsmedia',
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  },
+  {
+    // Serves the bundled offline speech model + ONNX WebAssembly runtime to the
+    // renderer. Read-only and confined to the app's own resources directory.
+    scheme: 'gsmodel',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
   }
 ])
+
+/** Directory holding the bundled speech model (packaged) or the repo copy (dev). */
+function modelsDir(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'models')
+    : join(app.getAppPath(), 'resources', 'models')
+}
+
+function modelMimeFor(p: string): string {
+  if (p.endsWith('.json')) return 'application/json'
+  if (p.endsWith('.wasm')) return 'application/wasm'
+  if (p.endsWith('.onnx')) return 'application/octet-stream'
+  return 'application/octet-stream'
+}
+
+function registerModelProtocol(): void {
+  const root = modelsDir()
+  protocol.handle('gsmodel', (request) => {
+    try {
+      const url = new URL(request.url)
+      // gsmodel://m/<relative path>
+      const rel = decodeURIComponent(url.pathname.replace(/^\//, ''))
+      const full = join(root, rel)
+      // Never serve anything outside the models directory. Uses path.relative so the
+      // check is correct on Windows (backslash separators) as well as POSIX.
+      const inside = relative(root, full)
+      if (!inside || inside.startsWith('..') || isAbsolute(inside) || !fs.existsSync(full)) {
+        return new Response('Not found', { status: 404 })
+      }
+      return new Response(fs.readFileSync(full), {
+        headers: { 'content-type': modelMimeFor(full) }
+      })
+    } catch {
+      return new Response('Error', { status: 500 })
+    }
+  })
+}
 
 function mimeFor(path: string): string {
   const ext = path.toLowerCase().split('.').pop() || ''
@@ -115,6 +158,15 @@ function createKioskWindow(mode = 'local'): BrowserWindow {
 
 app.whenReady().then(async () => {
   registerMediaProtocol()
+  registerModelProtocol()
+
+  // Allow the microphone for the Dental Scribe's built-in recorder (and nothing else).
+  // Audio never leaves the computer — it is transcribed locally by the bundled model.
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'media')
+  })
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'media')
+
   await initDatabase()
   registerIpc()
   setKioskFactory(createKioskWindow)

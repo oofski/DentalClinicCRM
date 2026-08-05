@@ -13,3 +13,6 @@ data/
 PatientFiles/
 *.db
 *.sqlite
+
+# Offline speech model, fetched at build time (never committed)
+resources/models/

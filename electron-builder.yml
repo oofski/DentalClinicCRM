@@ -27,6 +27,10 @@ publish:
 extraResources:
   - from: node_modules/sql.js/dist/sql-wasm.wasm
     to: sql-wasm.wasm
+  # Offline speech model + ONNX runtime for the Dental Scribe microphone.
+  # Populated by `npm run fetch-models` before packaging.
+  - from: resources/models
+    to: models
 
 win:
   target:
