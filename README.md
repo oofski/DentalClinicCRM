@@ -106,6 +106,13 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
   - The old **Start capture** mode re-focused the box and moved the caret every 400 ms, which could interrupt an in-flight insertion. That mode is **removed** — there is no capture button any more; simply click in the box and press **Win + H**.
 - **Live word counter** above the box, so you can see at a glance whether Windows is actually delivering text.
 
+### New in v1.4.0 — Built-in microphone (no more Windows dictation)
+- **🎙 Record button in the Dental Scribe.** Press **Record**, speak, press **Stop & transcribe** — the app converts your speech to text **on the clinic computer itself** and then runs the analysis and formatting automatically. Windows voice typing (Win + H) is no longer involved at all.
+- **Still 100% offline.** Speech recognition runs locally with a bundled **Whisper (tiny.en)** model through WebAssembly — no cloud service, no API key, no internet. Audio never leaves the computer and is never written to disk.
+- **One flow, end to end:** speak → transcript appears → dental terms corrected → tooth findings, treatment-plan items and the mark-all-others-healthy step proposed for review → **Apply**.
+- Typing and pasting still work exactly as before, and the microphone is only requested when you press Record.
+- *Note:* the model adds roughly 50 MB to the installer, and the **first** recording of a session takes a few extra seconds while the speech model loads into memory.
+
 ## Sign-in accounts
 
 A fresh install bootstraps with a **single administrator** account:
@@ -145,7 +152,7 @@ npm install
 npm run dev        # launches the app with hot reload
 ```
 
-Useful scripts: `npm run build` (compile), `npm run typecheck`, `npm run dist:win` (Windows installer), `npm run dist:linux` (AppImage, for testing).
+Useful scripts: `npm run build` (compile), `npm run typecheck`, `npm run fetch-models` (download the offline speech model), `npm run dist:win` (Windows installer), `npm run dist:linux` (AppImage, for testing).
 
 ## Where data is stored
 
@@ -176,6 +183,7 @@ Back up the database any time from **Settings → Data & Backup → Back Up Data
 - **Main process** (`electron/main/`): database, repositories, auth (bcryptjs), file storage, PDF/print engine, email, and all IPC handlers.
 - **Renderer** (`src/`): React UI, routed with React Router (`HashRouter`).
 - **Shared** (`shared/`): types, dental reference data, consent content, branding, and the tooth-chart geometry/SVG — used by both the interactive chart and the printed report so they always match.
+- **Speech (`src/lib/speech.ts`):** Whisper tiny.en runs in the renderer through WebAssembly (`@xenova/transformers`). The model is fetched at build time by `scripts/fetch-models.mjs`, bundled as an extra resource, and served read-only over the `gsmodel://` protocol — there is no network access at runtime.
 - **PDF & printing:** documents are rendered as HTML and converted via Electron's own print engine — `printToPDF()` for export/email and the system print dialog for physical printing, which is why printing is reliable across printers.
 - **Security:** `contextIsolation` on, `nodeIntegration` off, a typed `contextBridge` preload, a restricted `gsmedia://` protocol for serving patient images, and a strict CSP.
 
