@@ -84,6 +84,16 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 - **"Treatment Report" is now "Additional Notes"** — renamed across the app, the PDF heading (English/Spanish/Arabic), and the patient record.
 - **Nicer tooth-tagging panel** — the condition and surface pickers are re-laid-out as tidy grids (conditions in two even columns, surfaces as five compact labelled chips) instead of buttons stacked on top of each other.
 
+### New in v1.3.0 — Dental Scribe (offline dictation → chart)
+- **Dental Scribe** in the exam screen (**Clinical Notes → 🦷 Dental Scribe**) turns a dictated/typed exam narrative into structured charting — **fully offline, no AI service, no cloud**:
+  - **Dental term correction** — fixes common dictation slips (e.g. *buckle → buccal, carries → caries, distil → distal*) from a built-in dental lexicon.
+  - **Tooth-notation reading** — understands **Universal (1–32), FDI, and Palmer** references (e.g. "FDI 26", "UR6", "upper right first molar") and normalizes them to the chart's Universal numbers.
+  - **Structured findings** — detects conditions (cavity, filling, implant, extraction, crown/RCT…) and surfaces (incl. shorthand like **MOD**), and proposes tooth-chart tags, treatment-plan items, and a cleaned clinical note.
+  - **Review-gated** — everything is shown for you to check/uncheck before it's applied; **nothing is saved until you click Apply**. Ambiguous terms (e.g. reversible vs. irreversible pulpitis) are flagged.
+  - Applied tooth tags also auto-generate the per-tooth clinical notes from v1.2.9.
+
+  *The offline dental-language approach is adapted from [DentaScribe](https://github.com/Victor-lyhan/dentascribe) (MIT license). Giving Smiles reimplements the lexicon-correction and tooth-notation ideas in TypeScript so no Python, ML models, or network are required; raw speech-to-text still comes from Windows voice typing.*
+
 ## Sign-in accounts
 
 A fresh install bootstraps with a **single administrator** account:
