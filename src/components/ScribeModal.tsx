@@ -3,6 +3,7 @@ import { Modal, useToast } from '@/components/ui'
 import { Icon } from '@/components/icons'
 import { DictateButton } from '@/components/Dictate'
 import { analyzeDictation, type ScribeResult, type ScribeToothFinding } from '@shared/scribe'
+import { Recorder, transcribeBlob } from '@/lib/speech'
 import { CONDITION_LABELS, SURFACES, TEETH } from '@shared/dental'
 import type { SurfaceKey, ToothChartData } from '@shared/types'
 
@@ -55,7 +56,10 @@ export function ScribeModal({
   const [addNote, setAddNote] = useState(true)
   const [markOthers, setMarkOthers] = useState(false)
   const [words, setWords] = useState(0)
+  const [recording, setRecording] = useState(false)
+  const [busyMsg, setBusyMsg] = useState('')
   const dictRef = useRef<HTMLTextAreaElement>(null)
+  const recorderRef = useRef<Recorder | null>(null)
 
   // IMPORTANT: the dictation box is deliberately UNCONTROLLED (no React `value`).
   // Windows voice typing inserts text through the OS Text Services Framework, the same
@@ -102,12 +106,9 @@ export function ScribeModal({
     saveBuffer('')
   }
 
-  const analyze = () => {
-    const text = readText().trim()
-    if (!text) {
-      toast.push('Dictate or type some text first', 'info')
-      return
-    }
+  const analyzeText = (input: string) => {
+    const text = (input || '').trim()
+    if (!text) return
     const r = analyzeDictation(text)
     setResult(r)
     setCorrected(r.corrected)
@@ -116,6 +117,68 @@ export function ScribeModal({
     setAddNote(true)
     setMarkOthers(r.markOthersHealthy)
   }
+
+  const analyze = () => {
+    const text = readText().trim()
+    if (!text) {
+      toast.push('Record, dictate, or type some text first', 'info')
+      return
+    }
+    analyzeText(text)
+  }
+
+  // ---- Built-in microphone (offline Whisper) --------------------------------
+  const appendText = (t: string) => {
+    const el = dictRef.current
+    if (!el || !t) return
+    el.value = el.value.trim() ? `${el.value.trim()} ${t}` : t
+    onInput()
+  }
+
+  const startRec = async () => {
+    try {
+      const r = new Recorder()
+      await r.start()
+      recorderRef.current = r
+      setRecording(true)
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : 'Could not start the microphone', 'error')
+    }
+  }
+
+  const stopRec = async () => {
+    const r = recorderRef.current
+    if (!r) return
+    setRecording(false)
+    setBusyMsg('Preparing audio…')
+    try {
+      const blob = await r.stop()
+      recorderRef.current = null
+      const text = await transcribeBlob(blob, (stage, pct) =>
+        setBusyMsg(pct != null ? `${stage}… ${pct}%` : `${stage}…`)
+      )
+      setBusyMsg('')
+      if (!text) {
+        toast.push("Nothing was heard — try again and speak a little closer to the microphone.", 'info')
+        return
+      }
+      appendText(text)
+      // Flow straight into analysis + formatting, which is the point of the button.
+      analyzeText(readText())
+    } catch (e) {
+      setBusyMsg('')
+      toast.push(e instanceof Error ? e.message : 'Transcription failed', 'error')
+    }
+  }
+
+  // Stop the mic if the window is closed mid-recording.
+  useEffect(() => {
+    if (open) return
+    recorderRef.current?.cancel()
+    recorderRef.current = null
+    setRecording(false)
+    setBusyMsg('')
+  }, [open])
 
   const selectedTeeth = useMemo(
     () => (result ? result.teeth.filter((_, i) => pickTeeth[i]) : []),
@@ -201,8 +264,45 @@ export function ScribeModal({
               {words > 0 ? `· ${words} word${words === 1 ? '' : 's'} captured` : '· empty'}
             </span>
           </label>
-          <DictateButton targetRef={dictRef} label="🎤 Put cursor here" />
+          <div className="row" style={{ gap: 6 }}>
+            {!recording ? (
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                disabled={!!busyMsg}
+                onClick={startRec}
+                title="Record with this computer's microphone and transcribe it here — fully offline"
+              >
+                🎙 Record
+              </button>
+            ) : (
+              <button type="button" className="btn btn-sm btn-danger" onClick={stopRec}>
+                ⏹ Stop &amp; transcribe
+              </button>
+            )}
+            <DictateButton targetRef={dictRef} label="⌨ Type here" />
+          </div>
         </div>
+
+        {(recording || busyMsg) && (
+          <div
+            className="alert"
+            style={{
+              marginBottom: 8,
+              fontSize: 12.5,
+              background: recording ? 'rgba(224,82,74,0.08)' : undefined
+            }}
+          >
+            {recording ? (
+              <b style={{ color: 'var(--danger)' }}>● Recording — speak now, then press “Stop &amp; transcribe”.</b>
+            ) : (
+              <>
+                {busyMsg} <span className="muted">(first recording also loads the speech model — this takes a little longer)</span>
+              </>
+            )}
+          </div>
+        )}
+
         <textarea
           ref={dictRef}
           onInput={onInput}
@@ -210,10 +310,9 @@ export function ScribeModal({
           style={{ minHeight: 110 }}
         />
         <span className="muted" style={{ fontSize: 11.5 }}>
-          Click in the box, then press <b>Win + H</b> and speak — the word count above rises as
-          Windows types. Nothing is corrected while you speak; dental terms are cleaned up only when
-          you press <b>Analyze</b>. Typing or pasting works just as well, and your text is remembered
-          if you close this window.
+          Press <b>🎙 Record</b>, speak, then <b>Stop</b> — the app transcribes it here <b>on this
+          computer</b> (no internet, no Windows dictation) and runs the analysis automatically. You
+          can also just type or paste. Your text is remembered if you close this window.
         </span>
       </div>
 
