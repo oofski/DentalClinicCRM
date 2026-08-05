@@ -94,6 +94,18 @@ It implements the full clinical workflow: **Intake → Consent (signed) → Exam
 
   *The offline dental-language approach is adapted from [DentaScribe](https://github.com/Victor-lyhan/dentascribe) (MIT license). Giving Smiles reimplements the lexicon-correction and tooth-notation ideas in TypeScript so no Python, ML models, or network are required; raw speech-to-text still comes from Windows voice typing.*
 
+### New in v1.3.1
+- **Raw capture** — dictation is no longer auto-corrected while you speak; dental terms are cleaned up only when you press **Analyze**, so nothing fights you mid-sentence.
+- **Dictation lands in the right box** — the 🎤 button now targets the Scribe box explicitly instead of "whichever field was last clicked", and speech appends at the end rather than overwriting.
+- **"All other teeth are healthy"** — the scribe recognises blanket statements ("the rest are WNL", "everything else is normal", …) and offers to mark every remaining tooth Healthy in one reviewed step.
+- **Unfinished dictation is remembered** if you close the window before applying.
+
+### New in v1.3.2
+- **Fixed: Windows voice typing produced no text in the Dental Scribe box.** Two of our own mechanisms were interfering with the OS dictation pathway:
+  - The dictation box was a React *controlled* input. Windows voice typing inserts text through the OS Text Services Framework (the same route an IME uses), and re-rendering the box mid-insertion cancelled it. The box is now **uncontrolled**, so it behaves like Notepad and React never touches text while Windows is writing it.
+  - The old **Start capture** mode re-focused the box and moved the caret every 400 ms, which could interrupt an in-flight insertion. That mode is **removed** — there is no capture button any more; simply click in the box and press **Win + H**.
+- **Live word counter** above the box, so you can see at a glance whether Windows is actually delivering text.
+
 ## Sign-in accounts
 
 A fresh install bootstraps with a **single administrator** account:
