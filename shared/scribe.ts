@@ -35,6 +35,8 @@ export interface ScribeResult {
   teeth: ScribeToothFinding[]
   treatments: ScribeTreatment[]
   flags: ScribeFlag[]
+  /** True when the dictation ends with e.g. "all other teeth are healthy". */
+  markOthersHealthy: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -326,6 +328,11 @@ const TREATMENT_KEYWORDS: { re: RegExp; treatment: string }[] = [
   { re: /\b(follow[- ]?up|recall|re-?evaluate|monitor)\b/, treatment: 'Follow-up' }
 ]
 
+// "all other teeth are healthy", "the rest are WNL", "everything else is normal", …
+// A blanket statement that every tooth NOT called out is healthy.
+const MARK_OTHERS_HEALTHY =
+  /\b(?:all\s+(?:other|remaining|the\s+other)|all\s+others?|the\s+rest|rest\s+of\s+the\s+teeth|remaining\s+teeth|everything\s+else|every\s+other\s+tooth)\b[^.;!?]{0,40}?\b(?:healthy|normal|sound|intact|unremarkable|wnl|within\s+normal\s+limits)\b/
+
 function extractSurfaces(sentence: string): SurfaceKey[] {
   const lower = sentence.toLowerCase()
   const found = new Set<SurfaceKey>()
@@ -358,11 +365,20 @@ export function analyzeDictation(input: string): ScribeResult {
 
   const teeth: ScribeToothFinding[] = []
   const treatments: ScribeTreatment[] = []
+  let markOthersHealthy = false
 
   // Work sentence by sentence so findings attach to the tooth mentioned nearby.
   const sentences = corrected.split(/(?<=[.;!?\n])\s+|\n+/).map((s) => s.trim()).filter(Boolean)
   for (const sentence of sentences) {
     const lower = sentence.toLowerCase()
+
+    // Blanket "everything else is healthy" — handled globally, not as a tooth finding,
+    // so it doesn't raise a "finding with no tooth number" flag.
+    if (MARK_OTHERS_HEALTHY.test(lower)) {
+      markOthersHealthy = true
+      continue
+    }
+
     const { teeth: toothNums, flags: toothFlags } = parseTeeth(sentence)
     flags.push(...toothFlags)
 
@@ -417,6 +433,7 @@ export function analyzeDictation(input: string): ScribeResult {
     corrections,
     teeth: [...byTooth.values()].sort((a, b) => a.tooth - b.tooth),
     treatments: dedupTx,
-    flags
+    flags,
+    markOthersHealthy
   }
 }

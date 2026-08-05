@@ -264,7 +264,7 @@ export default function Exam() {
   // Apply the Dental Scribe review: chart tags (which auto-generate per-tooth notes),
   // treatment-plan items, and the corrected transcript as a note.
   const applyScribe = async (a: ScribeApply) => {
-    if (a.findings.length) {
+    if (a.findings.length || a.markOthersHealthy) {
       setChart((prev) => {
         const next = { ...prev }
         for (const f of a.findings) {
@@ -272,6 +272,18 @@ export default function Exam() {
           const surfaces = [...cur.surfaces]
           for (const s of f.surfaces) if (!surfaces.includes(s)) surfaces.push(s)
           next[f.tooth] = { condition: f.condition ?? cur.condition, surfaces, note: cur.note }
+        }
+        // "All other teeth are healthy" — fill in every tooth that wasn't called out
+        // and isn't already charted, so existing findings are never overwritten.
+        if (a.markOthersHealthy) {
+          const named = new Set(a.findings.map((f) => f.tooth))
+          for (let n = 1; n <= 32; n++) {
+            if (named.has(n)) continue
+            const cur = next[n]
+            if (!cur || cur.condition === 'unexamined') {
+              next[n] = { condition: 'healthy', surfaces: cur?.surfaces || [], note: cur?.note || '' }
+            }
+          }
         }
         return next
       })
@@ -605,7 +617,12 @@ export default function Exam() {
         </div>
       )}
 
-      <ScribeModal open={scribeOpen} onClose={() => setScribeOpen(false)} onApply={applyScribe} />
+      <ScribeModal
+        open={scribeOpen}
+        onClose={() => setScribeOpen(false)}
+        onApply={applyScribe}
+        chart={chart}
+      />
     </div>
   )
 }
