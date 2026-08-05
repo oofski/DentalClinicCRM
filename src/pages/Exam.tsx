@@ -25,6 +25,7 @@ import { toothChartSvgString } from '@/components/toothGeometry'
 import { Icon } from '@/components/icons'
 import { useToast } from '@/components/ui'
 import { DictateButton } from '@/components/Dictate'
+import { ScribeModal, type ScribeApply } from '@/components/ScribeModal'
 import { formatDate } from '@/lib/format'
 
 // ---- Auto-charting → clinical notes (v1.2.9) --------------------------------
@@ -96,6 +97,7 @@ export default function Exam() {
   // Composer
   const [noteType, setNoteType] = useState<NoteType>('finding')
   const [noteText, setNoteText] = useState('')
+  const [scribeOpen, setScribeOpen] = useState(false)
 
   // Snapshot of the last-reconciled chart, so auto-notes are diffed (not rebuilt).
   const prevChartRef = useRef<ToothChartData>({})
@@ -259,6 +261,42 @@ export default function Exam() {
     toast.push('Added to Treatment Plan — choose a recommended treatment', 'success')
   }
 
+  // Apply the Dental Scribe review: chart tags (which auto-generate per-tooth notes),
+  // treatment-plan items, and the corrected transcript as a note.
+  const applyScribe = async (a: ScribeApply) => {
+    if (a.findings.length) {
+      setChart((prev) => {
+        const next = { ...prev }
+        for (const f of a.findings) {
+          const cur = next[f.tooth] || { condition: 'unexamined', surfaces: [], note: '' }
+          const surfaces = [...cur.surfaces]
+          for (const s of f.surfaces) if (!surfaces.includes(s)) surfaces.push(s)
+          next[f.tooth] = { condition: f.condition ?? cur.condition, surfaces, note: cur.note }
+        }
+        return next
+      })
+    }
+    if (a.treatments.length) {
+      setItems((prev) => [
+        ...prev,
+        ...a.treatments.map((t) => ({
+          id: uid(),
+          description: t.treatment,
+          tooth: t.tooth != null ? String(t.tooth) : '',
+          priority: 'routine' as TreatmentPriority,
+          estimate: '',
+          cost: '',
+          details: t.text
+        }))
+      ])
+    }
+    if (a.note) {
+      await api.notes.create(eid, 'finding', a.note.text, a.note.teeth)
+      setNotes(await api.notes.listByExam(eid))
+      flagSaved()
+    }
+  }
+
   const generate = async () => {
     setBusy(true)
     try {
@@ -320,7 +358,14 @@ export default function Exam() {
       <div className="grid-2" style={{ gap: 16, alignItems: 'start' }}>
         {/* Clinical notes */}
         <div className="card">
-          <div className="card-title">Clinical Notes</div>
+          <div className="card-title">
+            Clinical Notes
+            {canClinical && (
+              <button className="btn btn-sm btn-primary" onClick={() => setScribeOpen(true)}>
+                🦷 Dental Scribe
+              </button>
+            )}
+          </div>
           {canClinical && (
             <div style={{ marginBottom: 14 }}>
               <div className="row" style={{ gap: 8, marginBottom: 8 }}>
@@ -559,6 +604,8 @@ export default function Exam() {
           )}
         </div>
       )}
+
+      <ScribeModal open={scribeOpen} onClose={() => setScribeOpen(false)} onApply={applyScribe} />
     </div>
   )
 }
