@@ -27,6 +27,8 @@ const saveBuffer = (v: string) => {
   }
 }
 
+const countWords = (v: string) => (v.trim() ? v.trim().split(/\s+/).length : 0)
+
 export interface ScribeApply {
   findings: ScribeToothFinding[]
   treatments: { tooth: number | null; treatment: string; text: string }[]
@@ -46,71 +48,67 @@ export function ScribeModal({
   chart: ToothChartData
 }) {
   const toast = useToast()
-  const [raw, setRaw] = useState('')
   const [result, setResult] = useState<ScribeResult | null>(null)
   const [corrected, setCorrected] = useState('')
   const [pickTeeth, setPickTeeth] = useState<Record<number, boolean>>({})
   const [pickTx, setPickTx] = useState<Record<number, boolean>>({})
   const [addNote, setAddNote] = useState(true)
   const [markOthers, setMarkOthers] = useState(false)
-  const [recording, setRecording] = useState(false)
+  const [words, setWords] = useState(0)
   const dictRef = useRef<HTMLTextAreaElement>(null)
 
-  // Restore any unfinished dictation when the modal opens.
+  // IMPORTANT: the dictation box is deliberately UNCONTROLLED (no React `value`).
+  // Windows voice typing inserts text through the OS Text Services Framework, the same
+  // pathway an IME uses. A React-controlled value rewrites the DOM node on every render
+  // and cancels that in-flight insertion, which is why dictated words silently vanished.
+  // Keeping React out of the typing path lets the box behave exactly like Notepad.
+  const readText = () => dictRef.current?.value ?? ''
+
+  // Restore any unfinished dictation when the modal opens, and put the caret in the box
+  // so Win + H has somewhere to type.
   useEffect(() => {
-    if (open) {
-      const saved = loadBuffer()
-      if (saved) setRaw((cur) => cur || saved)
-    } else {
-      setRecording(false)
+    if (!open) return
+    const el = dictRef.current
+    if (!el) return
+    const saved = loadBuffer()
+    if (saved && !el.value) el.value = saved
+    setWords(countWords(el.value))
+    el.focus()
+    const end = el.value.length
+    try {
+      el.setSelectionRange(end, end)
+    } catch {
+      /* noop */
     }
   }, [open])
 
-  // Persist every keystroke/dictated word so nothing is ever lost.
-  useEffect(() => {
-    if (open) saveBuffer(raw)
-  }, [raw, open])
-
-  // While "recording", keep the caret pinned in the dictation box so Windows voice
-  // typing always lands here — regardless of where the mouse happens to be.
-  useEffect(() => {
-    if (!recording || !open) return
-    const keep = () => {
-      const el = dictRef.current
-      if (el && document.activeElement !== el) {
-        el.focus()
-        const end = el.value.length
-        try {
-          el.setSelectionRange(end, end)
-        } catch {
-          /* noop */
-        }
-      }
-    }
-    keep()
-    const t = setInterval(keep, 400)
-    return () => clearInterval(t)
-  }, [recording, open])
+  // Save on every input (typed or dictated). This only updates a counter — it never
+  // rewrites the textarea — so it cannot disturb dictation.
+  const onInput = () => {
+    const v = readText()
+    saveBuffer(v)
+    setWords(countWords(v))
+  }
 
   const reset = () => {
-    setRaw('')
+    if (dictRef.current) dictRef.current.value = ''
+    setWords(0)
     setResult(null)
     setCorrected('')
     setPickTeeth({})
     setPickTx({})
     setAddNote(true)
     setMarkOthers(false)
-    setRecording(false)
     saveBuffer('')
   }
 
   const analyze = () => {
-    if (!raw.trim()) {
-      toast.push('Dictate or paste some text first', 'info')
+    const text = readText().trim()
+    if (!text) {
+      toast.push('Dictate or type some text first', 'info')
       return
     }
-    setRecording(false)
-    const r = analyzeDictation(raw)
+    const r = analyzeDictation(text)
     setResult(r)
     setCorrected(r.corrected)
     setPickTeeth(Object.fromEntries(r.teeth.map((_, i) => [i, true])))
@@ -199,33 +197,23 @@ export function ScribeModal({
         <div className="row between" style={{ alignItems: 'center' }}>
           <label style={{ margin: 0 }}>
             Dictation{' '}
-            {recording && (
-              <span style={{ color: 'var(--danger)', fontWeight: 700, fontSize: 12 }}>● capturing</span>
-            )}
+            <span className="muted" style={{ fontWeight: 400, fontSize: 11.5 }}>
+              {words > 0 ? `· ${words} word${words === 1 ? '' : 's'} captured` : '· empty'}
+            </span>
           </label>
-          <div className="row" style={{ gap: 6 }}>
-            <DictateButton targetRef={dictRef} />
-            <button
-              type="button"
-              className={`btn btn-sm ${recording ? 'btn-danger' : 'btn-primary'}`}
-              onClick={() => setRecording((r) => !r)}
-              title="Keeps the cursor locked in this box so dictation always lands here"
-            >
-              {recording ? 'Stop capture' : 'Start capture'}
-            </button>
-          </div>
+          <DictateButton targetRef={dictRef} label="🎤 Put cursor here" />
         </div>
         <textarea
           ref={dictRef}
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
+          onInput={onInput}
           placeholder="e.g. Tooth 14 has a MOD cavity. Number 30 needs a crown. All other teeth are healthy."
           style={{ minHeight: 110 }}
         />
         <span className="muted" style={{ fontSize: 11.5 }}>
-          Raw capture — <b>nothing is corrected while you speak</b>; dental terms are cleaned up only
-          when you press <b>Analyze</b>. <b>Start capture</b> locks the cursor here so dictation can't
-          land in another box. Your text is remembered even if you close this window.
+          Click in the box, then press <b>Win + H</b> and speak — the word count above rises as
+          Windows types. Nothing is corrected while you speak; dental terms are cleaned up only when
+          you press <b>Analyze</b>. Typing or pasting works just as well, and your text is remembered
+          if you close this window.
         </span>
       </div>
 
