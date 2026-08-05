@@ -31,11 +31,22 @@ function getTranscriber(onProgress?: SpeechProgress): Promise<Transcriber> {
     env.allowLocalModels = true
     env.localModelPath = 'gsmodel://m/'
     env.useBrowserCache = false
-    if (env.backends?.onnx?.wasm) {
-      env.backends.onnx.wasm.wasmPaths = 'gsmodel://m/ort/'
-      // Single-threaded avoids needing SharedArrayBuffer / COOP-COEP headers.
-      env.backends.onnx.wasm.numThreads = 1
+
+    // Defence in depth. In our Vite production build `fs` already resolves to an empty
+    // stub, so these are false anyway — but if the build ever switched to the prebuilt
+    // UMD bundle or a nodeIntegration renderer, useFS=true would make getFile() treat
+    // "gsmodel://..." as a filesystem path instead of fetching it.
+    env.useFS = false
+    env.useFSCache = false
+    if (!env.backends?.onnx?.wasm) {
+      // Never silently fall through to onnxruntime's CDN default — that would take the
+      // clinic app online, which must never happen.
+      throw new Error('ONNX WebAssembly backend unavailable')
     }
+    env.backends.onnx.wasm.wasmPaths = 'gsmodel://m/ort/'
+    // Single-threaded avoids needing SharedArrayBuffer / cross-origin isolation, which a
+    // file:// page cannot have, and avoids blob: workers the CSP would block.
+    env.backends.onnx.wasm.numThreads = 1
 
     const pipe = await pipeline('automatic-speech-recognition', MODEL_ID, {
       quantized: true,
@@ -60,35 +71,25 @@ function getTranscriber(onProgress?: SpeechProgress): Promise<Transcriber> {
 /** Decode a recorded blob to the 16 kHz mono float samples Whisper expects. */
 async function toMono16k(blob: Blob): Promise<Float32Array> {
   const buf = await blob.arrayBuffer()
-  const Ctx: typeof AudioContext =
-    window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-  const ctx = new Ctx()
-  try {
-    const decoded = await ctx.decodeAudioData(buf)
-    // Average channels down to mono.
-    const chans = decoded.numberOfChannels
-    const len = decoded.length
-    const mono = new Float32Array(len)
-    for (let c = 0; c < chans; c++) {
-      const data = decoded.getChannelData(c)
-      for (let i = 0; i < len; i++) mono[i] += data[i] / chans
-    }
-    if (decoded.sampleRate === SAMPLE_RATE) return mono
-    // Linear resample to 16 kHz.
-    const ratio = decoded.sampleRate / SAMPLE_RATE
-    const outLen = Math.floor(len / ratio)
-    const out = new Float32Array(outLen)
-    for (let i = 0; i < outLen; i++) {
-      const src = i * ratio
-      const i0 = Math.floor(src)
-      const i1 = Math.min(i0 + 1, len - 1)
-      const t = src - i0
-      out[i] = mono[i0] * (1 - t) + mono[i1] * t
-    }
-    return out
-  } finally {
-    ctx.close().catch(() => {})
+  if (buf.byteLength === 0) throw new Error('Nothing was recorded — please try again.')
+  // Decoding straight into a 16 kHz context lets the browser do a proper, filtered
+  // resample. Hand-rolling the downsample aliases 8-24 kHz energy into the band the
+  // Whisper mel filters actually read (max 8 kHz), which measurably hurts accuracy.
+  const OfflineCtx: typeof OfflineAudioContext =
+    window.OfflineAudioContext ||
+    (window as unknown as { webkitOfflineAudioContext: typeof OfflineAudioContext }).webkitOfflineAudioContext
+  const ctx = new OfflineCtx(1, 1, SAMPLE_RATE)
+  const decoded = await ctx.decodeAudioData(buf)
+  const chans = decoded.numberOfChannels
+  const len = decoded.length
+  if (chans === 1) return decoded.getChannelData(0)
+  // Average channels down to mono.
+  const mono = new Float32Array(len)
+  for (let c = 0; c < chans; c++) {
+    const data = decoded.getChannelData(c)
+    for (let i = 0; i < len; i++) mono[i] += data[i] / chans
   }
+  return mono
 }
 
 /** Transcribe a recorded audio blob into text, fully offline. */
@@ -125,26 +126,53 @@ export class Recorder {
       throw new Error('The microphone could not be started.')
     }
     this.chunks = []
-    this.rec = new MediaRecorder(this.stream)
-    this.rec.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) this.chunks.push(e.data)
+    try {
+      this.rec = new MediaRecorder(this.stream)
+      this.rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) this.chunks.push(e.data)
+      }
+      this.rec.start()
+    } catch (e) {
+      // Never leave an acquired microphone running if the recorder failed to start.
+      this.cancel()
+      throw new Error('The microphone could not be started.')
     }
-    this.rec.start()
   }
 
-  /** Stops recording and resolves with the captured audio. */
+  /** Stops recording and resolves with the captured audio. Always releases the mic. */
   stop(): Promise<Blob> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const rec = this.rec
-      if (!rec) return resolve(new Blob())
-      rec.onstop = () => {
+      if (!rec) return reject(new Error('Nothing was recorded — please try again.'))
+
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
         const blob = new Blob(this.chunks, { type: rec.mimeType || 'audio/webm' })
-        this.stream?.getTracks().forEach((t) => t.stop())
-        this.stream = null
-        this.rec = null
+        this.cancel()
         resolve(blob)
       }
-      rec.stop()
+      // If onstop never fires (device removed, driver hiccup) don't hang the UI forever.
+      const timer = setTimeout(finish, 5000)
+
+      rec.onstop = finish
+      rec.onerror = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        this.cancel()
+        reject(new Error('Recording failed — please try again.'))
+      }
+      // The recorder may already have stopped itself (e.g. the mic was unplugged),
+      // in which case stop() throws InvalidStateError.
+      if (rec.state === 'inactive') return finish()
+      try {
+        rec.stop()
+      } catch {
+        finish()
+      }
     })
   }
 

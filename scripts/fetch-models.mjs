@@ -42,25 +42,38 @@ async function download({ rel, optional }) {
     throw new Error(`${res.status} ${res.statusText} for ${url}`)
   }
   const buf = Buffer.from(await res.arrayBuffer())
-  fs.writeFileSync(dest, buf)
+  // Guard against a truncated download being silently baked into the installer.
+  const expected = Number(res.headers.get('content-length') || 0)
+  if (expected && buf.length !== expected) {
+    throw new Error(`Truncated download for ${rel}: got ${buf.length} of ${expected} bytes`)
+  }
+  // Write to a temp file and rename, so an interrupted run can't leave a partial file
+  // that the "cached" check above would later accept.
+  const tmp = `${dest}.part`
+  fs.writeFileSync(tmp, buf)
+  fs.renameSync(tmp, dest)
   console.log(`  + ${rel} (${(buf.length / 1048576).toFixed(1)} MB)`)
 }
 
 // The ONNX runtime's .wasm binaries ship inside the npm package; copy them next to
 // the model so the renderer can load everything through the gsmodel:// protocol.
+// With numThreads = 1 the runtime only ever requests the SIMD build (and the plain
+// build as a fallback if SIMD is unsupported). The two *-threaded binaries need
+// SharedArrayBuffer, which a file:// page cannot have, so shipping them would add
+// ~19 MB to the installer for files that can never load.
+const ORT_WASM = ['ort-wasm-simd.wasm', 'ort-wasm.wasm']
+
 function copyOrtWasm() {
   const src = path.join(ROOT, 'node_modules', '@xenova', 'transformers', 'dist')
   const dst = path.join(ROOT, 'resources', 'models', 'ort')
   if (!fs.existsSync(src)) throw new Error('@xenova/transformers is not installed — run npm install first')
   fs.mkdirSync(dst, { recursive: true })
-  let n = 0
-  for (const f of fs.readdirSync(src)) {
-    if (f.endsWith('.wasm')) {
-      fs.copyFileSync(path.join(src, f), path.join(dst, f))
-      n++
-    }
+  for (const f of ORT_WASM) {
+    const from = path.join(src, f)
+    if (!fs.existsSync(from)) throw new Error(`Required ONNX runtime binary missing: ${f}`)
+    fs.copyFileSync(from, path.join(dst, f))
+    console.log(`  + ort/${f} (${(fs.statSync(from).size / 1048576).toFixed(1)} MB)`)
   }
-  console.log(`  + ${n} ONNX runtime .wasm file(s)`)
 }
 
 console.log(`Fetching offline speech model ${MODEL_ID} …`)

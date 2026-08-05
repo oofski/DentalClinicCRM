@@ -6,8 +6,15 @@ import react from '@vitejs/plugin-react'
 // `npm run dev` (Vite HMR + React Fast Refresh inline preamble) is not blocked.
 function cspPlugin() {
   const csp =
-    "default-src 'self'; img-src 'self' data: gsmedia:; style-src 'self' 'unsafe-inline'; " +
-    "script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    "default-src 'self'; " +
+    // The offline speech model + ONNX runtime are fetched from the app's own
+    // gsmodel:// protocol; without this they fall back to default-src and are blocked.
+    "connect-src 'self' gsmodel:; " +
+    "img-src 'self' data: gsmedia:; style-src 'self' 'unsafe-inline'; " +
+    // 'wasm-unsafe-eval' is required for onnxruntime-web to compile the speech model.
+    // It permits WebAssembly compilation only — it does NOT enable eval() of JavaScript.
+    "script-src 'self' 'wasm-unsafe-eval'; " +
+    "object-src 'none'; base-uri 'self'; form-action 'none'"
   return {
     name: 'inject-csp',
     apply: 'build' as const,
