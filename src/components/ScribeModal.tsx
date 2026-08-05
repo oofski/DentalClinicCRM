@@ -60,6 +60,7 @@ export function ScribeModal({
   const [busyMsg, setBusyMsg] = useState('')
   const dictRef = useRef<HTMLTextAreaElement>(null)
   const recorderRef = useRef<Recorder | null>(null)
+  const startingRef = useRef(false)
 
   // IMPORTANT: the dictation box is deliberately UNCONTROLLED (no React `value`).
   // Windows voice typing inserts text through the OS Text Services Framework, the same
@@ -129,13 +130,25 @@ export function ScribeModal({
 
   // ---- Built-in microphone (offline Whisper) --------------------------------
   const appendText = (t: string) => {
+    if (!t) return
     const el = dictRef.current
-    if (!el || !t) return
-    el.value = el.value.trim() ? `${el.value.trim()} ${t}` : t
-    onInput()
+    if (el) {
+      el.value = el.value.trim() ? `${el.value.trim()} ${t}` : t
+      onInput()
+      return
+    }
+    // The modal was closed while transcribing — save to the buffer so the doctor's
+    // words are never silently thrown away; they reappear next time it opens.
+    const prev = loadBuffer().trim()
+    saveBuffer(prev ? `${prev} ${t}` : t)
   }
 
   const startRec = async () => {
+    // getUserMedia can take seconds on the first Windows permission prompt; without this
+    // guard a second click would orphan the first MediaStream and leave the mic live.
+    if (startingRef.current || recorderRef.current) return
+    startingRef.current = true
+    setBusyMsg('Starting microphone…')
     try {
       const r = new Recorder()
       await r.start()
@@ -143,6 +156,9 @@ export function ScribeModal({
       setRecording(true)
     } catch (e) {
       toast.push(e instanceof Error ? e.message : 'Could not start the microphone', 'error')
+    } finally {
+      startingRef.current = false
+      setBusyMsg('')
     }
   }
 
@@ -153,11 +169,9 @@ export function ScribeModal({
     setBusyMsg('Preparing audio…')
     try {
       const blob = await r.stop()
-      recorderRef.current = null
       const text = await transcribeBlob(blob, (stage, pct) =>
         setBusyMsg(pct != null ? `${stage}… ${pct}%` : `${stage}…`)
       )
-      setBusyMsg('')
       if (!text) {
         toast.push("Nothing was heard — try again and speak a little closer to the microphone.", 'info')
         return
@@ -166,8 +180,13 @@ export function ScribeModal({
       // Flow straight into analysis + formatting, which is the point of the button.
       analyzeText(readText())
     } catch (e) {
-      setBusyMsg('')
       toast.push(e instanceof Error ? e.message : 'Transcription failed', 'error')
+    } finally {
+      // Always release the recorder and clear the banner, even if stop/transcribe threw —
+      // otherwise the modal is stuck with Record disabled.
+      recorderRef.current?.cancel()
+      recorderRef.current = null
+      setBusyMsg('')
     }
   }
 
@@ -224,7 +243,10 @@ export function ScribeModal({
   }
 
   const close = () => {
-    reset()
+    // Deliberately does NOT reset: the dictation buffer is promised to survive closing
+    // (a stray backdrop click or Escape must not destroy the doctor's words). Only a
+    // successful apply() clears it. Just drop the transient analysis.
+    setResult(null)
     onClose()
   }
 

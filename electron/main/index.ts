@@ -40,7 +40,7 @@ function modelMimeFor(p: string): string {
 
 function registerModelProtocol(): void {
   const root = modelsDir()
-  protocol.handle('gsmodel', (request) => {
+  protocol.handle('gsmodel', async (request) => {
     try {
       const url = new URL(request.url)
       // gsmodel://m/<relative path>
@@ -52,8 +52,14 @@ function registerModelProtocol(): void {
       if (!inside || inside.startsWith('..') || isAbsolute(inside) || !fs.existsSync(full)) {
         return new Response('Not found', { status: 404 })
       }
-      return new Response(fs.readFileSync(full), {
-        headers: { 'content-type': modelMimeFor(full) }
+      // Async so a ~33 MB model read never blocks the main process (and with it every
+      // window and IPC call). content-length makes the loading percentage meaningful.
+      const data = await fs.promises.readFile(full)
+      return new Response(data, {
+        headers: {
+          'content-type': modelMimeFor(full),
+          'content-length': String(data.byteLength)
+        }
       })
     } catch {
       return new Response('Error', { status: 500 })

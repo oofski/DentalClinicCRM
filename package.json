@@ -1,6 +1,6 @@
 {
   "name": "giving-smiles",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Giving Smiles - Dental Clinic Management Software (Windows desktop application)",
   "author": "Software Smiles",
   "license": "UNLICENSED",
@@ -20,7 +20,6 @@
     "fetch-models": "node scripts/fetch-models.mjs"
   },
   "dependencies": {
-    "@xenova/transformers": "^2.17.2",
     "bcryptjs": "^2.4.3",
     "electron-updater": "^6.8.9",
     "nodemailer": "^6.9.14",
@@ -35,6 +34,7 @@
     "@types/react-dom": "^18.3.0",
     "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-react": "^4.3.1",
+    "@xenova/transformers": "^2.17.2",
     "electron": "^31.3.0",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
