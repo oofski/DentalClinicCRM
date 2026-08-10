@@ -69,11 +69,16 @@ async function download({ rel, optional }, id = MODEL_ID, outDir = OUT) {
 
 // The ONNX runtime's .wasm binaries ship inside the npm package; copy them next to
 // the model so the renderer can load everything through the gsmodel:// protocol.
-// With numThreads = 1 the runtime only ever requests the SIMD build (and the plain
-// build as a fallback if SIMD is unsupported). The two *-threaded binaries need
-// SharedArrayBuffer, which a file:// page cannot have, so shipping them would add
-// ~19 MB to the installer for files that can never load.
-const ORT_WASM = ['ort-wasm-simd.wasm', 'ort-wasm.wasm']
+// The renderer is served over app:// with COOP/COEP, so the page IS cross-origin
+// isolated and SharedArrayBuffer is available — ONNX Runtime can use several threads.
+// That means the *-threaded binaries are genuinely loadable now and must ship; without
+// them a multi-threaded session would fail to start its WebAssembly.
+const ORT_WASM = [
+  'ort-wasm-simd-threaded.wasm',
+  'ort-wasm-simd.wasm',
+  'ort-wasm-threaded.wasm',
+  'ort-wasm.wasm'
+]
 
 function copyOrtWasm() {
   const src = path.join(ROOT, 'node_modules', '@xenova', 'transformers', 'dist')

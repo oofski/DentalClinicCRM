@@ -1,8 +1,9 @@
 // LLM-based interpretation of dental dictation, running fully offline.
 //
 // A small instruct model (Qwen1.5-0.5B-Chat) is bundled into the installer and executed
-// in-process through the same ONNX/WebAssembly runtime and gsmodel:// protocol as the
-// speech model. No Ollama, no second process, no network.
+// through the same ONNX/WebAssembly runtime and gsmodel:// protocol as the speech model.
+// No Ollama, no second process, no network. Generation happens on the Scribe WORKER
+// thread (src/lib/scribeWorker.ts) so it cannot freeze the clinic app's window.
 //
 // SAFETY: an LLM can state a tooth number the doctor never said, fluently enough to look
 // correct. Two guards apply to everything it returns:
@@ -14,53 +15,15 @@
 // Whatever survives still goes through the existing review screen before it is applied.
 
 import type { ScribeResult, ScribeToothFinding, ScribeTreatment } from '@shared/scribe'
+import { runGenerate, type EngineProgress } from './scribeEngine'
 import type { ToothConditionKey, SurfaceKey } from '@shared/types'
 
-const MODEL_ID = 'Xenova/Qwen1.5-0.5B-Chat'
-
-export type LlmProgress = (stage: string, pct?: number) => void
-
-type Generator = (
-  prompt: string,
-  opts?: Record<string, unknown>
-) => Promise<{ generated_text: string }[] | { generated_text: string }>
-
-let generatorPromise: Promise<Generator> | null = null
-
-function getGenerator(onProgress?: LlmProgress): Promise<Generator> {
-  if (generatorPromise) return generatorPromise
-  generatorPromise = (async () => {
-    const { env, pipeline } = await import('@xenova/transformers')
-    env.allowRemoteModels = false
-    env.allowLocalModels = true
-    env.localModelPath = 'gsmodel://m/'
-    env.useBrowserCache = false
-    env.useFS = false
-    env.useFSCache = false
-    if (!env.backends?.onnx?.wasm) throw new Error('ONNX WebAssembly backend unavailable')
-    env.backends.onnx.wasm.wasmPaths = 'gsmodel://m/ort/'
-    env.backends.onnx.wasm.numThreads = 1
-
-    const pipe = await pipeline('text-generation', MODEL_ID, {
-      quantized: true,
-      progress_callback: (p: { status?: string; progress?: number }) => {
-        if (p?.status === 'progress' && typeof p.progress === 'number') {
-          onProgress?.('Loading language model', Math.round(p.progress))
-        }
-      }
-    })
-    return pipe as unknown as Generator
-  })().catch((e) => {
-    generatorPromise = null
-    throw e instanceof Error ? e : new Error(String(e))
-  })
-  return generatorPromise
-}
+export type LlmProgress = EngineProgress
 
 // ---------------------------------------------------------------------------
 // Prompt — deliberately asks for a compact line format, not verbose JSON. Every
-// generated token costs real time on single-threaded WebAssembly, so the output
-// format is about as short as it can be while staying unambiguous.
+// generated token costs real time, so the output format is about as short as it
+// can be while staying unambiguous.
 // ---------------------------------------------------------------------------
 
 const CONDITIONS = 'healthy|cavity|filled|missing|implant|treatment|extraction'
@@ -225,15 +188,17 @@ export async function analyzeWithLlm(
   base: ScribeResult,
   onProgress?: LlmProgress
 ): Promise<ScribeResult | null> {
-  const generate = await getGenerator(onProgress)
-  onProgress?.('Reading your notes')
-  const out = await generate(buildPrompt(text), {
-    max_new_tokens: 160,
-    do_sample: false, // greedy: reproducible, and no creative invention
-    temperature: 0,
-    return_full_text: false
-  })
-  const generated = Array.isArray(out) ? out[0]?.generated_text : out?.generated_text
+  // Runs on the worker thread; the window stays responsive throughout.
+  const generated = await runGenerate(
+    buildPrompt(text),
+    {
+      max_new_tokens: 160,
+      do_sample: false, // greedy: reproducible, and no creative invention
+      temperature: 0,
+      return_full_text: false
+    },
+    onProgress
+  )
   if (!generated) return null
 
   const parsed = parseLlmOutput(String(generated), text)
