@@ -4,6 +4,7 @@ import { Icon } from '@/components/icons'
 import { DictateButton } from '@/components/Dictate'
 import { analyzeDictation, type ScribeResult, type ScribeToothFinding } from '@shared/scribe'
 import { Recorder, transcribeBlob } from '@/lib/speech'
+import { analyzeWithLlm } from '@/lib/scribeLlm'
 import { CONDITION_LABELS, SURFACES, TEETH } from '@shared/dental'
 import type { SurfaceKey, ToothChartData } from '@shared/types'
 
@@ -107,10 +108,7 @@ export function ScribeModal({
     saveBuffer('')
   }
 
-  const analyzeText = (input: string) => {
-    const text = (input || '').trim()
-    if (!text) return
-    const r = analyzeDictation(text)
+  const showResult = (r: ScribeResult) => {
     setResult(r)
     setCorrected(r.corrected)
     setPickTeeth(Object.fromEntries(r.teeth.map((_, i) => [i, true])))
@@ -119,13 +117,40 @@ export function ScribeModal({
     setMarkOthers(r.markOthersHealthy)
   }
 
+  // The local language model interprets the dictation. The deterministic parser runs
+  // first so there is always something on screen, and it remains the fallback if the
+  // model is unavailable or returns nothing usable — the doctor is never left with a
+  // blank review screen.
+  const analyzeText = async (input: string) => {
+    const text = (input || '').trim()
+    if (!text) return
+    const base = analyzeDictation(text)
+    showResult(base)
+    setBusyMsg('Reading your notes…')
+    try {
+      const better = await analyzeWithLlm(text, base, (stage, pct) =>
+        setBusyMsg(pct != null ? `${stage}… ${pct}%` : `${stage}…`)
+      )
+      if (better) showResult(better)
+    } catch (e) {
+      toast.push(
+        e instanceof Error && /model/i.test(e.message)
+          ? 'The language model could not be loaded — showing the rule-based reading instead.'
+          : 'Could not run the language model — showing the rule-based reading instead.',
+        'info'
+      )
+    } finally {
+      setBusyMsg('')
+    }
+  }
+
   const analyze = () => {
     const text = readText().trim()
     if (!text) {
       toast.push('Record, dictate, or type some text first', 'info')
       return
     }
-    analyzeText(text)
+    void analyzeText(text)
   }
 
   // ---- Built-in microphone (offline Whisper) --------------------------------
@@ -178,7 +203,7 @@ export function ScribeModal({
       }
       appendText(text)
       // Flow straight into analysis + formatting, which is the point of the button.
-      analyzeText(readText())
+      await analyzeText(readText())
     } catch (e) {
       toast.push(e instanceof Error ? e.message : 'Transcription failed', 'error')
     } finally {
@@ -319,7 +344,7 @@ export function ScribeModal({
               <b style={{ color: 'var(--danger)' }}>● Recording — speak now, then press “Stop &amp; transcribe”.</b>
             ) : (
               <>
-                {busyMsg} <span className="muted">(first recording also loads the speech model — this takes a little longer)</span>
+                {busyMsg} <span className="muted">(the first run of a session also loads the models — this takes a little longer)</span>
               </>
             )}
           </div>
@@ -466,6 +491,25 @@ export function ScribeModal({
                     {t.tooth != null && <span className="pill azure">#{t.tooth}</span>}
                   </label>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {result.notes.length > 0 && (
+            <div>
+              <div className="card-title" style={{ fontSize: 14 }}>
+                Notes (not charted){' '}
+                <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>
+                  ({result.notes.length})
+                </span>
+              </div>
+              <div className="muted" style={{ fontSize: 12.5 }}>
+                Kept as part of the clinical note, not applied to the tooth chart:
+                <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                  {result.notes.map((n, i) => (
+                    <li key={i}>{n.text}</li>
+                  ))}
+                </ul>
               </div>
             </div>
           )}
