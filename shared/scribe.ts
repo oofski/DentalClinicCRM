@@ -36,6 +36,8 @@ export interface ScribeTreatment {
   tooth: number | null
   treatment: string // one of RECOMMENDED_TREATMENTS
   text: string
+  timeline?: string // one of TREATMENT_TIMELINES, when the doctor stated urgency
+  priority?: 'urgent' | 'important' | 'routine'
 }
 export interface ScribeNote {
   text: string
@@ -290,6 +292,22 @@ const PROCEDURES: { re: RegExp; treatment: string }[] = [
   { re: /\b(?:follow[- ]?up|recall|re-?evaluate|monitor|watch)\b/, treatment: 'Follow-up' },
   { re: /\b(?:filling|composite|amalgam|restore|restoration|restorative)\b/, treatment: 'Filling' }
 ]
+
+// When the doctor states urgency it should reach the Treatment Plan's Timeline and
+// Priority columns instead of being dropped. Order matters: soonest wins.
+const TIMELINES: { re: RegExp; timeline: string; priority: 'urgent' | 'important' | 'routine' }[] = [
+  { re: /\b(?:asap|as soon as possible|right away|immediately|straight away|today|emergency|urgent(?:ly)?)\b/, timeline: 'ASAP', priority: 'urgent' },
+  { re: /\b(?:next|within|in|couple of)\s+(?:a\s+)?(?:two|2|few)\s+weeks?\b|\bthis week\b|\bnext week\b|\bsoon\b/, timeline: 'Within 2 weeks', priority: 'important' },
+  { re: /\b(?:next|within|in)\s+(?:a|one|1)\s+month\b|\b(?:four|4)\s+weeks\b/, timeline: 'Within 1 month', priority: 'important' },
+  { re: /\b(?:next|within|in)\s+(?:three|3)\s+months\b/, timeline: 'Within 3 months', priority: 'routine' },
+  { re: /\b(?:next|within|in)\s+(?:six|6)\s+months\b|\bnext recall\b|\bnext visit\b/, timeline: 'Within 6 months', priority: 'routine' },
+  { re: /\b(?:elective|no rush|when (?:they|she|he)(?:'s| is)? ready|whenever|keep an eye|monitor|watch)\b/, timeline: 'Elective / monitor', priority: 'routine' }
+]
+
+function readUrgency(lower: string): { timeline?: string; priority?: 'urgent' | 'important' | 'routine' } {
+  const hit = TIMELINES.find((t) => t.re.test(lower))
+  return hit ? { timeline: hit.timeline, priority: hit.priority } : {}
+}
 
 // ---------------------------------------------------------------------------
 // 5) Veto layer — reasons a number is NOT a tooth
@@ -625,15 +643,17 @@ export function analyzeDictation(input: string): ScribeResult {
       pending = null
     }
 
+    const urgency = needsWork ? readUrgency(lower) : {}
+
     const group = { teeth: [] as ScribeToothFinding[], treatments: [] as ScribeTreatment[] }
     if (bound.length && condition) {
       for (const r of bound) group.teeth.push({ tooth: r.tooth, condition, surfaces, text: clause })
       for (const t of procedures) {
-        for (const r of bound) group.treatments.push({ tooth: r.tooth, treatment: t, text: clause })
+        for (const r of bound) group.treatments.push({ tooth: r.tooth, treatment: t, text: clause, ...urgency })
       }
     } else if (procedures.length && !bound.length) {
       // Arch-level treatment with no tooth ("she needs a scaling and polishing").
-      for (const t of procedures) group.treatments.push({ tooth: null, treatment: t, text: clause })
+      for (const t of procedures) group.treatments.push({ tooth: null, treatment: t, text: clause, ...urgency })
     } else if (hasIntent && !bound.length && condition !== 'healthy') {
       flags.push({
         term: clause.slice(0, 48),
@@ -677,13 +697,20 @@ export function analyzeDictation(input: string): ScribeResult {
     }
   }
 
-  const seenTx = new Set<string>()
-  const dedupTx = treatments.filter((t) => {
+  // Merge repeated mentions of the same tooth + procedure, keeping whichever mention
+  // carried the urgency ("32 needs treatment" ... "32 needs a crown ASAP").
+  const txByKey = new Map<string, ScribeTreatment>()
+  for (const t of treatments) {
     const k = `${t.tooth ?? '-'}:${t.treatment}`
-    if (seenTx.has(k)) return false
-    seenTx.add(k)
-    return true
-  })
+    const cur = txByKey.get(k)
+    if (!cur) txByKey.set(k, { ...t })
+    else if (!cur.timeline && t.timeline) {
+      cur.timeline = t.timeline
+      cur.priority = t.priority
+      cur.text = t.text
+    }
+  }
+  const dedupTx = [...txByKey.values()]
 
   return {
     corrected,
