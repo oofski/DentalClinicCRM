@@ -10,8 +10,20 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const MODEL_ID = 'Xenova/whisper-tiny.en'
-const BASE = `https://huggingface.co/${MODEL_ID}/resolve/main`
+// Small instruct model that interprets the dictation. Runs in-process through the same
+// ONNX/WebAssembly runtime as Whisper — no Ollama, no second process, no network.
+const LLM_ID = 'Xenova/Qwen1.5-0.5B-Chat'
+const hf = (id, rel) => `https://huggingface.co/${id}/resolve/main/${rel}`
 const OUT = path.join(ROOT, 'resources', 'models', MODEL_ID)
+const LLM_OUT = path.join(ROOT, 'resources', 'models', LLM_ID)
+
+const LLM_FILES = [
+  { rel: 'config.json' },
+  { rel: 'tokenizer.json' },
+  { rel: 'tokenizer_config.json' },
+  { rel: 'generation_config.json', optional: true },
+  { rel: 'onnx/decoder_model_merged_quantized.onnx' }
+]
 
 // Quantized ONNX weights keep the installer small (~50 MB total).
 // `optional: true` files are nice-to-have — a missing one must not break the build.
@@ -25,14 +37,14 @@ const FILES = [
   { rel: 'generation_config.json', optional: true }
 ]
 
-async function download({ rel, optional }) {
-  const dest = path.join(OUT, rel)
+async function download({ rel, optional }, id = MODEL_ID, outDir = OUT) {
+  const dest = path.join(outDir, rel)
   if (fs.existsSync(dest) && fs.statSync(dest).size > 0) {
     console.log(`  = ${rel} (cached)`)
     return
   }
   fs.mkdirSync(path.dirname(dest), { recursive: true })
-  const url = `${BASE}/${rel}`
+  const url = hf(id, rel)
   const res = await fetch(url)
   if (!res.ok) {
     if (optional) {
@@ -78,5 +90,7 @@ function copyOrtWasm() {
 
 console.log(`Fetching offline speech model ${MODEL_ID} …`)
 for (const f of FILES) await download(f)
+console.log(`Fetching offline language model ${LLM_ID} …`)
+for (const f of LLM_FILES) await download(f, LLM_ID, LLM_OUT)
 copyOrtWasm()
 console.log('Done. Models are in resources/models/ and will be bundled into the installer.')
