@@ -67,19 +67,20 @@ const CONDITIONS = 'healthy|cavity|filled|missing|implant|treatment|extraction'
 const SYSTEM = `You convert a dentist's spoken exam notes into chart entries.
 Output ONLY lines, no prose, no JSON, no explanation.
 One line per tooth actually mentioned:
-T<universal tooth number 1-32>|<${CONDITIONS}>|<surfaces or ->|<procedure or ->
+T<universal tooth number 1-32>|<${CONDITIONS}>|<surfaces or ->|<procedure or ->|<when or ->
 Surfaces from: occlusal,buccal,lingual,mesial,distal (MOD = mesial,occlusal,distal).
 Procedure from: Filling,Crown,Root Canal,Extraction,Implant,Cleaning,Scaling & Polishing,Night Guard,Referral,Follow-up
+When from: ASAP,Within 2 weeks,Within 1 month,Within 3 months,Within 6 months,Elective / monitor (use - if the dentist gave no timing)
 Use "treatment" when the tooth needs work. Use the present-state condition otherwise.
 If the dentist says every other tooth is healthy, add the single line: OTHERS|healthy
 Never invent a tooth the dentist did not say. Spoken digit pairs like "two four" mean 24.
 "to 19" means tooth 19. Ignore ages, millimetres, blood pressure, dates and x-ray counts.`
 
-const EXAMPLE_IN = `Tooth two four needs some treatment, 15 and 16 both have cavities, to 19 needs a root canal, all the other teeth are healthy.`
-const EXAMPLE_OUT = `T24|treatment|-|-
-T15|cavity|-|-
-T16|cavity|-|-
-T19|treatment|-|Root Canal
+const EXAMPLE_IN = `Tooth two four needs some treatment, 15 and 16 both have cavities, to 19 needs a root canal ASAP, all the other teeth are healthy.`
+const EXAMPLE_OUT = `T24|treatment|-|-|-
+T15|cavity|-|-|-
+T16|cavity|-|-|-
+T19|treatment|-|Root Canal|ASAP
 OTHERS|healthy`
 
 function buildPrompt(text: string): string {
@@ -104,6 +105,14 @@ const VALID_SURFACES = new Set<SurfaceKey>(['occlusal', 'buccal', 'lingual', 'me
 const VALID_PROCEDURES = new Set([
   'Filling', 'Crown', 'Root Canal', 'Extraction', 'Implant', 'Cleaning',
   'Scaling & Polishing', 'Night Guard', 'Referral', 'Follow-up', 'Other'
+])
+const VALID_TIMELINES = new Map<string, 'urgent' | 'important' | 'routine'>([
+  ['ASAP', 'urgent'],
+  ['Within 2 weeks', 'important'],
+  ['Within 1 month', 'important'],
+  ['Within 3 months', 'routine'],
+  ['Within 6 months', 'routine'],
+  ['Elective / monitor', 'routine']
 ])
 
 const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
@@ -165,7 +174,7 @@ export function parseLlmOutput(raw: string, transcript: string): LlmParseOutcome
       markOthersHealthy = true
       continue
     }
-    const m = l.match(/^T\s*(\d{1,2})\s*\|([^|]*)\|([^|]*)\|(.*)$/i)
+    const m = l.match(/^T\s*(\d{1,2})\s*\|([^|]*)\|([^|]*)\|([^|]*)\|?(.*)$/i)
     if (!m) {
       if (/^T\s*\d/i.test(l)) rejected.push(l)
       continue
@@ -192,7 +201,14 @@ export function parseLlmOutput(raw: string, transcript: string): LlmParseOutcome
 
     const proc = m[4].trim()
     if (proc && proc !== '-' && VALID_PROCEDURES.has(proc)) {
-      treatments.push({ tooth, treatment: proc, text: l })
+      const when = (m[5] || '').trim()
+      const priority = VALID_TIMELINES.get(when)
+      treatments.push({
+        tooth,
+        treatment: proc,
+        text: l,
+        ...(priority ? { timeline: when, priority } : {})
+      })
     }
   }
 
