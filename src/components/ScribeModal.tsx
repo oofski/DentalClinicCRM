@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, useToast } from '@/components/ui'
 import { Icon } from '@/components/icons'
 import { DictateButton } from '@/components/Dictate'
-import { analyzeDictation, type ScribeResult, type ScribeToothFinding } from '@shared/scribe'
+import { analyzeDictation, type ScribeResult, type ScribeToothFinding, type ScribeTreatment } from '@shared/scribe'
 import { Recorder, transcribeBlob } from '@/lib/speech'
 import { analyzeWithLlm } from '@/lib/scribeLlm'
 import { CONDITION_LABELS, SURFACES, TEETH } from '@shared/dental'
@@ -33,7 +33,7 @@ const countWords = (v: string) => (v.trim() ? v.trim().split(/\s+/).length : 0)
 
 export interface ScribeApply {
   findings: ScribeToothFinding[]
-  treatments: { tooth: number | null; treatment: string; text: string }[]
+  treatments: ScribeTreatment[]
   note: { text: string; teeth: number[] } | null
   markOthersHealthy: boolean
 }
@@ -489,6 +489,9 @@ export function ScribeModal({
                     />
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{t.treatment}</span>
                     {t.tooth != null && <span className="pill azure">#{t.tooth}</span>}
+                    {t.timeline && (
+                      <span className="pill gray" style={{ fontSize: 11.5 }}>{t.timeline}</span>
+                    )}
                   </label>
                 ))}
               </div>
