@@ -14,6 +14,8 @@ function cspPlugin() {
     // 'wasm-unsafe-eval' is required for onnxruntime-web to compile the speech model.
     // It permits WebAssembly compilation only — it does NOT enable eval() of JavaScript.
     "script-src 'self' 'wasm-unsafe-eval'; " +
+    // The Scribe runs its models on a Worker so inference cannot freeze the window.
+    "worker-src 'self' blob:; " +
     "object-src 'none'; base-uri 'self'; form-action 'none'"
   return {
     name: 'inject-csp',

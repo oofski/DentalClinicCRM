@@ -21,8 +21,59 @@ protocol.registerSchemesAsPrivileged([
     // renderer. Read-only and confined to the app's own resources directory.
     scheme: 'gsmodel',
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  },
+  {
+    // The renderer itself. A file:// page can never be cross-origin isolated, which
+    // means no SharedArrayBuffer and therefore single-threaded model inference. Served
+    // from a real origin with COOP/COEP we get isolation, and the Scribe's worker can
+    // use several CPU threads instead of one.
+    scheme: 'app',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true }
   }
 ])
+
+/** Headers that make the renderer cross-origin isolated. */
+const ISOLATION_HEADERS = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp'
+}
+
+function appMimeFor(p: string): string {
+  if (p.endsWith('.html')) return 'text/html'
+  if (p.endsWith('.js') || p.endsWith('.mjs')) return 'text/javascript'
+  if (p.endsWith('.css')) return 'text/css'
+  if (p.endsWith('.json')) return 'application/json'
+  if (p.endsWith('.svg')) return 'image/svg+xml'
+  if (p.endsWith('.wasm')) return 'application/wasm'
+  if (p.endsWith('.png')) return 'image/png'
+  if (p.endsWith('.woff2')) return 'font/woff2'
+  return 'application/octet-stream'
+}
+
+function registerAppProtocol(): void {
+  const root = join(__dirname, '../renderer')
+  protocol.handle('app', async (request) => {
+    try {
+      const url = new URL(request.url)
+      const rel = decodeURIComponent(url.pathname.replace(/^\//, '')) || 'index.html'
+      const full = join(root, rel)
+      const inside = relative(root, full)
+      if (!inside || inside.startsWith('..') || isAbsolute(inside) || !fs.existsSync(full)) {
+        return new Response('Not found', { status: 404 })
+      }
+      const data = await fs.promises.readFile(full)
+      return new Response(data, {
+        headers: {
+          'content-type': appMimeFor(full),
+          'content-length': String(data.byteLength),
+          ...ISOLATION_HEADERS
+        }
+      })
+    } catch {
+      return new Response('Error', { status: 500 })
+    }
+  })
+}
 
 /** Directory holding the bundled speech model (packaged) or the repo copy (dev). */
 function modelsDir(): string {
@@ -58,7 +109,11 @@ function registerModelProtocol(): void {
       return new Response(data, {
         headers: {
           'content-type': modelMimeFor(full),
-          'content-length': String(data.byteLength)
+          'content-length': String(data.byteLength),
+          // Under COEP: require-corp a cross-origin subresource is blocked unless it
+          // opts in. Both headers are needed for fetch() from the isolated renderer.
+          'Cross-Origin-Resource-Policy': 'cross-origin',
+          'Access-Control-Allow-Origin': '*'
         }
       })
     } catch {
@@ -91,11 +146,41 @@ function registerMediaProtocol(): void {
         return new Response('Not found', { status: 404 })
       }
       const data = fs.readFileSync(filePath)
-      return new Response(data, { headers: { 'content-type': mimeFor(filePath) } })
+      return new Response(data, {
+        headers: {
+          'content-type': mimeFor(filePath),
+          'Cross-Origin-Resource-Policy': 'cross-origin',
+          'Access-Control-Allow-Origin': '*'
+        }
+      })
     } catch {
       return new Response('Error', { status: 500 })
     }
   })
+}
+
+/**
+ * Load the packaged renderer over app:// so the page is cross-origin isolated. If that
+ * ever fails, fall back to file:// — the app then runs exactly as it did before, with
+ * single-threaded inference, rather than showing a blank window.
+ */
+function loadAppRoute(win: BrowserWindow, route?: string): void {
+  const hash = route ? `#${route}` : ''
+  let fellBack = false
+  const fallback = () => {
+    if (fellBack) return
+    fellBack = true
+    console.error('app:// failed to load; falling back to file://')
+    if (route) win.loadFile(INDEX_HTML, { hash: route })
+    else win.loadFile(INDEX_HTML)
+  }
+  win.webContents.once('did-fail-load', (_e, code, desc, url) => {
+    if (url.startsWith('app://')) {
+      console.error('app:// load failed', code, desc)
+      fallback()
+    }
+  })
+  win.loadURL(`app://gs/index.html${hash}`).catch(fallback)
 }
 
 function createMainWindow(): BrowserWindow {
@@ -128,7 +213,7 @@ function createMainWindow(): BrowserWindow {
   if (RENDERER_URL) {
     win.loadURL(RENDERER_URL)
   } else {
-    win.loadFile(INDEX_HTML)
+    loadAppRoute(win)
   }
   return win
 }
@@ -157,7 +242,7 @@ function createKioskWindow(mode = 'local'): BrowserWindow {
   if (RENDERER_URL) {
     win.loadURL(`${RENDERER_URL}#${route}`)
   } else {
-    win.loadFile(INDEX_HTML, { hash: route })
+    loadAppRoute(win, route)
   }
   return win
 }
@@ -165,6 +250,7 @@ function createKioskWindow(mode = 'local'): BrowserWindow {
 app.whenReady().then(async () => {
   registerMediaProtocol()
   registerModelProtocol()
+  registerAppProtocol()
 
   // Allow the microphone for the Dental Scribe's built-in recorder (and nothing else).
   // Audio never leaves the computer — it is transcribed locally by the bundled model.
