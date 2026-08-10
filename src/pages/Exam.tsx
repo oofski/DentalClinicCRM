@@ -291,12 +291,14 @@ export default function Exam() {
     if (a.treatments.length) {
       setItems((prev) => [
         ...prev,
+        // Urgency the doctor dictated ("...needs a crown ASAP") lands straight in the
+        // plan's Timeline and Priority columns instead of being left blank.
         ...a.treatments.map((t) => ({
           id: uid(),
           description: t.treatment,
           tooth: t.tooth != null ? String(t.tooth) : '',
-          priority: 'routine' as TreatmentPriority,
-          estimate: '',
+          priority: (t.priority || 'routine') as TreatmentPriority,
+          estimate: t.timeline || '',
           cost: '',
           details: t.text
         }))
