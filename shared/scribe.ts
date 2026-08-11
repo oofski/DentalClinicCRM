@@ -254,6 +254,12 @@ const TOOTH_NAME_POS: Record<string, number> = {
 const NEEDS_WORK =
   /\b(?:needs?|needing|going to need|gonna need|will need|requires?|indicated for|due for|prep|prepping|recommend|recommended|recommending|replace|replacing|redo)\b/
 
+// A planned extraction gets the chart's own purple "Extraction" status rather than the
+// generic red "Needs Treatment" — at a glance the doctor can see which teeth are coming
+// out. The tooth is still present, so this is distinct from "missing".
+const EXTRACTION_INTENT =
+  /\b(?:extraction|extract(?:ed|ing)?|removal|remove|taken out|pulled|pull)\b/
+
 // Present-state conditions, consulted only when the clause is NOT a "needs work" clause.
 const PRESENT_STATE: { re: RegExp; key: ToothConditionKey }[] = [
   { re: /\b(?:is|are|has|have|with)\s+(?:an?\s+)?implants?\b/, key: 'implant' },
@@ -620,7 +626,11 @@ export function analyzeDictation(input: string): ScribeResult {
       !ownNeedsWork && !presentState && lastNeedsWork && /^(?:and|plus|also)\b/.test(lower)
     const needsWork: boolean = ownNeedsWork || continuation
     lastNeedsWork = needsWork
-    const condition: ToothConditionKey | undefined = needsWork ? 'treatment' : presentState
+    const condition: ToothConditionKey | undefined = needsWork
+      ? EXTRACTION_INTENT.test(lower)
+        ? 'extraction'
+        : 'treatment'
+      : presentState
     const hasIntent = !!condition
     const surfaces = extractSurfaces(clause)
 

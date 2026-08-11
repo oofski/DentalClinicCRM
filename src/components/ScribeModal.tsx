@@ -4,7 +4,8 @@ import { Icon } from '@/components/icons'
 import { DictateButton } from '@/components/Dictate'
 import { analyzeDictation, type ScribeResult, type ScribeToothFinding, type ScribeTreatment } from '@shared/scribe'
 import { Recorder, transcribeBlob } from '@/lib/speech'
-import { analyzeWithLlm } from '@/lib/scribeLlm'
+import { analyzeWithLlm, runScribeSelfTest, type ScribeSelfTest } from '@/lib/scribeLlm'
+import { rememberExample, exampleCount, clearExamples } from '@/lib/scribeMemory'
 import { CONDITION_LABELS, SURFACES, TEETH } from '@shared/dental'
 import type { SurfaceKey, ToothChartData } from '@shared/types'
 
@@ -57,6 +58,8 @@ export function ScribeModal({
   const [addNote, setAddNote] = useState(true)
   const [markOthers, setMarkOthers] = useState(false)
   const [words, setWords] = useState(0)
+  const [learned, setLearned] = useState(0)
+  const [selfTest, setSelfTest] = useState<ScribeSelfTest | null>(null)
   const [recording, setRecording] = useState(false)
   const [busyMsg, setBusyMsg] = useState('')
   const dictRef = useRef<HTMLTextAreaElement>(null)
@@ -79,6 +82,7 @@ export function ScribeModal({
     const saved = loadBuffer()
     if (saved && !el.value) el.value = saved
     setWords(countWords(el.value))
+    setLearned(exampleCount())
     el.focus()
     const end = el.value.length
     try {
@@ -139,6 +143,21 @@ export function ScribeModal({
           : 'Could not run the language model — showing the rule-based reading instead.',
         'info'
       )
+    } finally {
+      setBusyMsg('')
+    }
+  }
+
+  // Proves the whole chain on THIS machine: model loads, generates, and the output
+  // parses into chart entries — with the raw model output shown, not just a tick.
+  const checkModel = async () => {
+    setSelfTest(null)
+    setBusyMsg('Checking the model\u2026')
+    try {
+      const r = await runScribeSelfTest((stage, pct) =>
+        setBusyMsg(pct != null ? `${stage}\u2026 ${pct}%` : `${stage}\u2026`)
+      )
+      setSelfTest(r)
     } finally {
       setBusyMsg('')
     }
@@ -263,6 +282,9 @@ export function ScribeModal({
     if (selectedTx.length) parts.push(`${selectedTx.length} plan item(s)`)
     if (addNote && corrected.trim()) parts.push('a note')
     toast.push(parts.length ? `Applied ${parts.join(', ')}` : 'Nothing selected to apply', parts.length ? 'success' : 'info')
+    // Teach the Scribe: what was dictated, and what the doctor ACTUALLY accepted after
+    // reviewing it. Replayed to the model next time so it adapts to this clinic.
+    if (parts.length) rememberExample(readText(), selectedTeeth, selectedTx, markOthers)
     reset()
     onClose()
   }
@@ -328,6 +350,15 @@ export function ScribeModal({
               </button>
             )}
             <DictateButton targetRef={dictRef} label="⌨ Type here" />
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              disabled={!!busyMsg || recording}
+              onClick={checkModel}
+              title="Run a known sentence through the model and show exactly what it returns"
+            >
+              Check model
+            </button>
           </div>
         </div>
 
@@ -357,11 +388,60 @@ export function ScribeModal({
           style={{ minHeight: 110 }}
         />
         <span className="muted" style={{ fontSize: 11.5 }}>
+          {learned > 0 && (
+            <>
+              <b>Learning from you:</b> {learned} past correction{learned === 1 ? '' : 's'} from this
+              clinic {learned === 1 ? 'is' : 'are'} being used to read your phrasing.{' '}
+            </>
+          )}
           Press <b>🎙 Record</b>, speak, then <b>Stop</b> — the app transcribes it here <b>on this
           computer</b> (no internet, no Windows dictation) and runs the analysis automatically. You
           can also just type or paste. Your text is remembered if you close this window.
         </span>
       </div>
+
+      {selfTest && (
+        <div className={`alert ${selfTest.ok ? 'success' : ''}`} style={{ fontSize: 12.5, marginTop: 4 }}>
+          <div className="row between wrap" style={{ gap: 8 }}>
+            <b>
+              {selfTest.ok
+                ? `✓ Model working — read ${selfTest.teeth.length} teeth in ${(selfTest.ms / 1000).toFixed(1)}s`
+                : '✗ The model did not return a usable reading'}
+            </b>
+            <button className="btn btn-sm btn-ghost" onClick={() => setSelfTest(null)}>Hide</button>
+          </div>
+          {selfTest.error && <div style={{ marginTop: 4 }}>{selfTest.error}</div>}
+          {selfTest.teeth.length > 0 && (
+            <div style={{ marginTop: 4 }}>Parsed: {selfTest.teeth.join(' · ')}</div>
+          )}
+          {selfTest.rejected.length > 0 && (
+            <div className="muted" style={{ marginTop: 4 }}>
+              Rejected by the safety checks: {selfTest.rejected.length}
+            </div>
+          )}
+          {selfTest.raw && (
+            <details style={{ marginTop: 6 }}>
+              <summary className="muted">Show exactly what the model returned</summary>
+              <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11.5, marginTop: 4 }}>{selfTest.raw}</pre>
+            </details>
+          )}
+          {learned > 0 && (
+            <div className="row" style={{ gap: 8, alignItems: 'center', marginTop: 6 }}>
+              <span className="muted">{learned} learned correction(s) in use.</span>
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => {
+                  clearExamples()
+                  setLearned(0)
+                  toast.push('Cleared what the Scribe had learned', 'info')
+                }}
+              >
+                Reset learning
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {result && (
         <div className="stack" style={{ gap: 14, marginTop: 6 }}>
