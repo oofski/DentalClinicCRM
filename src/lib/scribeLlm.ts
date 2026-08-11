@@ -16,6 +16,7 @@
 
 import type { ScribeResult, ScribeToothFinding, ScribeTreatment } from '@shared/scribe'
 import { runGenerate, type EngineProgress } from './scribeEngine'
+import { fewShotBlock } from './scribeMemory'
 import type { ToothConditionKey, SurfaceKey } from '@shared/types'
 
 export type LlmProgress = EngineProgress
@@ -34,13 +35,15 @@ T<universal tooth number 1-32>|<${CONDITIONS}>|<surfaces or ->|<procedure or ->|
 Surfaces from: occlusal,buccal,lingual,mesial,distal (MOD = mesial,occlusal,distal).
 Procedure from: Filling,Crown,Root Canal,Extraction,Implant,Cleaning,Scaling & Polishing,Night Guard,Referral,Follow-up
 When from: ASAP,Within 2 weeks,Within 1 month,Within 3 months,Within 6 months,Elective / monitor (use - if the dentist gave no timing)
-Use "treatment" when the tooth needs work. Use the present-state condition otherwise.
+Use "extraction" when the tooth is to be taken out, "treatment" when it needs other work.
+Use the present-state condition (healthy/cavity/filled/missing/implant) otherwise.
 If the dentist says every other tooth is healthy, add the single line: OTHERS|healthy
 Never invent a tooth the dentist did not say. Spoken digit pairs like "two four" mean 24.
 "to 19" means tooth 19. Ignore ages, millimetres, blood pressure, dates and x-ray counts.`
 
-const EXAMPLE_IN = `Tooth two four needs some treatment, 15 and 16 both have cavities, to 19 needs a root canal ASAP, all the other teeth are healthy.`
+const EXAMPLE_IN = `Tooth two four needs some treatment, two five needs an extraction, 15 and 16 both have cavities, to 19 needs a root canal ASAP, all the other teeth are healthy.`
 const EXAMPLE_OUT = `T24|treatment|-|-|-
+T25|extraction|-|Extraction|-
 T15|cavity|-|-|-
 T16|cavity|-|-|-
 T19|treatment|-|Root Canal|ASAP
@@ -52,6 +55,8 @@ function buildPrompt(text: string): string {
     `<|im_start|>system\n${SYSTEM}<|im_end|>\n` +
     `<|im_start|>user\n${EXAMPLE_IN}<|im_end|>\n` +
     `<|im_start|>assistant\n${EXAMPLE_OUT}<|im_end|>\n` +
+    // Corrections this clinic has already made, so the model adapts to their phrasing.
+    fewShotBlock() +
     `<|im_start|>user\n${text}<|im_end|>\n` +
     `<|im_start|>assistant\n`
   )
@@ -214,5 +219,52 @@ export async function analyzeWithLlm(
     treatments: parsed.treatments,
     markOthersHealthy: parsed.markOthersHealthy,
     flags
+  }
+}
+
+/**
+ * Prove the whole chain works on this machine: model loads, generates, and the output
+ * parses into chart entries. Returned verbatim so the doctor (and support) can see
+ * exactly what the model said, not just whether it "worked".
+ */
+export interface ScribeSelfTest {
+  ok: boolean
+  ms: number
+  raw: string
+  teeth: string[]
+  rejected: string[]
+  error?: string
+}
+
+const SELFTEST_INPUT =
+  'Tooth 14 has a MOD cavity, tooth 30 needs a crown ASAP, and 19 needs an extraction.'
+
+export async function runScribeSelfTest(onProgress?: LlmProgress): Promise<ScribeSelfTest> {
+  const started = Date.now()
+  try {
+    const raw = await runGenerate(
+      buildPrompt(SELFTEST_INPUT),
+      { max_new_tokens: 120, do_sample: false, temperature: 0, return_full_text: false },
+      onProgress
+    )
+    const parsed = parseLlmOutput(String(raw || ''), SELFTEST_INPUT)
+    return {
+      ok: parsed.teeth.length > 0,
+      ms: Date.now() - started,
+      raw: String(raw || '').trim(),
+      teeth: parsed.teeth.map(
+        (t) => `#${t.tooth} ${t.condition}${t.surfaces.length ? ' (' + t.surfaces.join(',') + ')' : ''}`
+      ),
+      rejected: parsed.rejected
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      ms: Date.now() - started,
+      raw: '',
+      teeth: [],
+      rejected: [],
+      error: e instanceof Error ? e.message : String(e)
+    }
   }
 }
