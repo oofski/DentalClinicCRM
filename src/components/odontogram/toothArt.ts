@@ -295,35 +295,42 @@ type CrownRow = [
 
 const CROWN: Record<string, CrownRow> = {
   // permanent upper
-  'permanent-upper-incisor-1': [11, 23, 24.5, 17, 27, 0],
-  'permanent-upper-incisor-2': [14, 18, 19.5, 13.5, 29, 0],
-  'permanent-upper-canine-3': [23, 19, 22, 15.5, 31, 13],
-  'permanent-upper-premolar-4': [25, 17.5, 20.5, 15, 34, 10],
-  'permanent-upper-premolar-5': [26, 17, 20, 14.5, 34, 9],
-  'permanent-upper-molar-6': [22, 25, 28, 21, 33, 7],
-  'permanent-upper-molar-7': [23, 23.5, 26.5, 20, 33, 6.5],
-  'permanent-upper-molar-8': [26, 21, 24, 18.5, 35, 6],
+  'permanent-upper-incisor-1': [11, 20.5, 24.5, 16.5, 27, 0],
+  'permanent-upper-incisor-2': [14, 16.5, 19.5, 13, 29, 0],
+  'permanent-upper-canine-3': [23, 18, 22, 15, 31, 13],
+  'permanent-upper-premolar-4': [27, 17, 21.5, 15.5, 35, 10],
+  'permanent-upper-premolar-5': [28, 16.5, 21, 15, 35, 9],
+  'permanent-upper-molar-6': [26, 24, 30, 22, 36, 7],
+  'permanent-upper-molar-7': [27, 22.5, 28.5, 21, 36, 6.5],
+  'permanent-upper-molar-8': [29, 20.5, 26, 19.5, 37, 6],
   // permanent lower
-  'permanent-lower-incisor-1': [14, 13.5, 15, 10.5, 29, 0],
-  'permanent-lower-incisor-2': [13.5, 15, 16.5, 11.5, 29, 0],
-  'permanent-lower-canine-3': [24, 16.5, 19, 13.5, 32, 13],
-  'permanent-lower-premolar-4': [25, 16.5, 19, 14, 34, 11],
-  'permanent-lower-premolar-5': [25.5, 17.5, 20, 14.5, 34, 9],
-  'permanent-lower-molar-6': [24, 27.5, 31, 23, 35, 6.5],
-  'permanent-lower-molar-7': [25, 26, 29, 21.5, 35, 6],
-  'permanent-lower-molar-8': [27, 24, 27, 20, 36, 5.5],
+  'permanent-lower-incisor-1': [14, 12.5, 15, 10.2, 29, 0],
+  'permanent-lower-incisor-2': [13.5, 13.5, 16.5, 11.3, 29, 0],
+  'permanent-lower-canine-3': [24, 15.5, 19, 13, 32, 13],
+  'permanent-lower-premolar-4': [27, 15.5, 20, 14.5, 35, 11],
+  'permanent-lower-premolar-5': [27.5, 16.5, 21, 15.5, 35, 9],
+  'permanent-lower-molar-6': [28, 26, 32.5, 24, 38, 6.5],
+  'permanent-lower-molar-7': [29, 24.5, 30.5, 22.5, 38, 6],
+  'permanent-lower-molar-8': [31, 23, 28.5, 21.5, 39, 5.5],
   // primary upper
-  'primary-upper-incisor-1': [31, 16, 17.5, 12.5, 41, 0],
-  'primary-upper-incisor-2': [33, 13, 14.5, 10, 43, 0],
-  'primary-upper-canine-3': [37, 13.5, 15.5, 10.5, 45, 9],
-  'primary-upper-molar-4': [34, 16, 18, 13.5, 46, 6],
-  'primary-upper-molar-5': [34, 17, 19, 14.5, 46, 6.5],
+  'primary-upper-incisor-1': [31, 14.5, 17.5, 12, 41, 0],
+  'primary-upper-incisor-2': [33, 12, 14.5, 10, 43, 0],
+  'primary-upper-canine-3': [37, 12.5, 15.5, 10.5, 45, 9],
+  // Primary molars are WIDER mesiodistally than the premolars that replace them. That
+  // surplus is the leeway space, and it is the whole reason a mixed-dentition chart is
+  // worth drawing: an orthodontist reads it off the chart. Drawing them narrower than
+  // their successors — which "primary teeth are smaller" would suggest — is wrong, and
+  // most wrong at the second primary molar, where the leeway space mostly lives.
+  'primary-upper-molar-4': [36, 17.5, 22, 16.4, 47, 6],
+  'primary-upper-molar-5': [35, 18.8, 23.5, 17.6, 47, 6.5],
   // primary lower
-  'primary-lower-incisor-1': [34, 11.5, 12.5, 8.5, 44, 0],
-  'primary-lower-incisor-2': [33, 12.5, 13.5, 9.5, 43, 0],
-  'primary-lower-canine-3': [38, 12, 13.5, 9.5, 46, 9],
-  'primary-lower-molar-4': [34, 16, 18, 13, 46, 5.5],
-  'primary-lower-molar-5': [34, 18, 19, 14.5, 46, 6]
+  'primary-lower-incisor-1': [34, 10.5, 12.5, 8.5, 44, 0],
+  'primary-lower-incisor-2': [33, 11, 13.5, 9.5, 43, 0],
+  'primary-lower-canine-3': [38, 11, 13.5, 9.5, 46, 9],
+  // Mandibular leeway space is roughly twice the maxillary, so the lower second primary
+  // molar is the widest primary tooth relative to its successor.
+  'primary-lower-molar-4': [36, 16.6, 21, 15.5, 47, 5.5],
+  'primary-lower-molar-5': [35, 19.2, 24, 18, 47, 6]
 }
 
 // ---------------------------------------------------------------------------
@@ -357,31 +364,31 @@ const ROOT: Record<string, RootRow> = {
   'permanent-upper-incisor-2': [1, 78, 136, 0, 0, 4, 4, 0],
   'permanent-upper-canine-3': [1, 78, 150, 0, 0, 4.5, 3, 0], // the longest root in the mouth
   'permanent-upper-premolar-4': [2, 108, 140, 11, 5.5, 3.5, 0, 0], // buccal + palatal
-  'permanent-upper-premolar-5': [1, 78, 142, 0, 0, 4, 3, 0],
-  'permanent-upper-molar-6': [3, 92, 136, 25, 6.5, 4.5, 0, 8],
-  'permanent-upper-molar-7': [3, 93, 134, 23, 6.5, 4.5, 0, 7],
+  'permanent-upper-premolar-5': [1, 78, 143, 0, 0, 4, 3.5, 0], // long, flattened, single
+  'permanent-upper-molar-6': [3, 92, 136, 27, 7, 4.8, 0, 8],
+  'permanent-upper-molar-7': [3, 93, 134, 25, 7, 4.8, 0, 7],
   'permanent-upper-molar-8': [2, 95, 130, 16, 7, 5, 0, 0], // often fused, short, conical
   // permanent lower
   'permanent-lower-incisor-1': [1, 78, 134, 0, 0, 3.5, 3, 0],
   'permanent-lower-incisor-2': [1, 78, 136, 0, 0, 3.5, 3.5, 0],
   'permanent-lower-canine-3': [1, 78, 148, 0, 0, 4.5, 3, 0],
   'permanent-lower-premolar-4': [1, 78, 140, 0, 0, 4, 3, 0],
-  'permanent-lower-premolar-5': [1, 78, 142, 0, 0, 4, 3, 0],
-  'permanent-lower-molar-6': [2, 88, 140, 20, 9, 5.5, 0, 0],
-  'permanent-lower-molar-7': [2, 89, 138, 18, 9, 5.5, 0, 0],
-  'permanent-lower-molar-8': [2, 92, 132, 14, 8, 5, 0, 0],
+  'permanent-lower-premolar-5': [1, 78, 141, 0, 0, 4.4, 2.5, 0], // blunter, more conical
+  'permanent-lower-molar-6': [2, 88, 140, 22, 9, 5.5, 0, 0],
+  'permanent-lower-molar-7': [2, 89, 138, 20, 9, 5.5, 0, 0],
+  'permanent-lower-molar-8': [2, 92, 132, 16, 8, 5, 0, 0],
   // primary upper — slender prongs, flaring straight off the gum line
   'primary-upper-incisor-1': [1, 76, 126, 0, 0, 3, 6, 0],
   'primary-upper-incisor-2': [1, 76, 124, 0, 0, 2.8, 7, 0],
   'primary-upper-canine-3': [1, 76, 134, 0, 0, 3.2, 6, 0],
-  'primary-upper-molar-4': [3, 78, 126, 32, 4.5, 3, 0, 6],
-  'primary-upper-molar-5': [3, 78, 128, 34, 4.5, 3, 0, 6],
+  'primary-upper-molar-4': [3, 78, 126, 31, 5, 3.4, 0, 6],
+  'primary-upper-molar-5': [3, 78, 128, 33, 5, 3.4, 0, 6],
   // primary lower
   'primary-lower-incisor-1': [1, 76, 122, 0, 0, 2.6, 6, 0],
   'primary-lower-incisor-2': [1, 76, 124, 0, 0, 2.8, 6, 0],
   'primary-lower-canine-3': [1, 76, 132, 0, 0, 3, 6, 0],
-  'primary-lower-molar-4': [2, 77, 126, 30, 5, 3, 0, 0],
-  'primary-lower-molar-5': [2, 77, 128, 32, 5, 3, 0, 0]
+  'primary-lower-molar-4': [2, 77, 126, 29, 5.4, 3.4, 0, 0],
+  'primary-lower-molar-5': [2, 77, 128, 31, 5.4, 3.4, 0, 0]
 }
 
 function key(t: ToothInfo): string {
@@ -448,12 +455,13 @@ function bitingEdge(t: ToothInfo, d: Dim): Biting {
   const cuspY = d.shoulderY - d.cuspH
 
   if (t.type === 'incisor') {
-    // A chisel: near-straight edge, a sharp mesio-incisal angle and a rounded distal one.
+    // A chisel: near-straight edge, with the mesio-incisal angle sharp and the disto-incisal
+    // one rounded off — the small asymmetry that tells a left tooth from a right one.
     return {
       nodes: [
         { x: left, y: d.shoulderY, k: LINE },
         { x: MID, y: d.shoulderY - 0.8, k: 0 },
-        { x: right, y: d.shoulderY + 2.2, k: LINE }
+        { x: right, y: d.shoulderY + 2.2, k: 0.18 }
       ],
       peaks: [],
       valleys: []
@@ -467,7 +475,7 @@ function bitingEdge(t: ToothInfo, d: Dim): Biting {
       nodes: [
         { x: left, y: d.shoulderY, k: LINE },
         { x: tip, y: cuspY, k: 0.24 },
-        { x: right, y: d.shoulderY + 2.4, k: LINE }
+        { x: right, y: d.shoulderY + 2.4, k: 0.2 }
       ],
       peaks: [tip],
       valleys: []
@@ -488,7 +496,7 @@ function bitingEdge(t: ToothInfo, d: Dim): Biting {
       const vx = (prev.x + x) / 2
       // The groove floor sits between the taller neighbour and the crown's shoulder, so a
       // valley can never dip below the corners — which keeps the buccal zone well formed.
-      const vy = Math.max(prev.y, y) + (d.shoulderY - Math.max(prev.y, y)) * 0.55
+      const vy = Math.max(prev.y, y) + (d.shoulderY - Math.max(prev.y, y)) * 0.7
       nodes.push({ x: vx, y: vy, k: 0 })
       valleys.push({ x: vx, y: vy })
     }
@@ -561,7 +569,7 @@ function buildCrown(t: ToothInfo, d: Dim): CrownGeom {
   // height in the band no matter how much the silhouette bulges.
   const yTop = Math.max(...b.nodes.map((n) => n.y))
   const yB = yTop + (CERVIX - yTop) * 0.3
-  const yL = CERVIX - (CERVIX - yTop) * 0.2
+  const yL = CERVIX - (CERVIX - yTop) * 0.24
   const safeL = Math.max(pointOn(left, 'y', yB).x, pointOn(left, 'y', yL).x)
   const safeR = Math.min(pointOn(right, 'y', yB).x, pointOn(right, 'y', yL).x)
   const xM = safeL + (safeR - safeL) * 0.3
