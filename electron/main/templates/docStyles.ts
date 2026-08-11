@@ -77,6 +77,59 @@ export function documentCss(): string {
   .chart-wrap { text-align: center; margin: 6px 0 2px; }
   .chart-wrap svg { max-width: 100%; height: auto; }
 
+  /* ---------- Odontogram ----------
+     The chart carries a colour AND a fill pattern per finding, because a printed chart is
+     photocopied, faxed and read in greyscale. printBackground is on and print-color-adjust
+     is exact (see the reset above), so the patterns survive the trip to paper — never
+     override the fills here with a flat colour. */
+  .og-block { page-break-inside: avoid; }
+  .og-chart { text-align: center; margin: 6px 0 2px; }
+  .og-chart svg { max-width: 100%; height: auto; }
+  .og-legend { margin: 4px 0 2px; page-break-inside: avoid; }
+  .og-legend svg { max-width: 100%; height: auto; }
+  .og-legend-title {
+    font-size: 10px; font-weight: 700; color: ${COLORS.muted};
+    text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px;
+  }
+
+  /* A findings table can legitimately run past one page, so it breaks between ROWS instead
+     of being shoved whole onto the next page, and repeats its header when it does. */
+  .og-table-section { margin-bottom: 14px; page-break-inside: auto; }
+  .og-table-section h2 {
+    font-size: 13px; font-weight: 700; color: ${COLORS.navy};
+    margin: 0 0 4px; padding-bottom: 3px; border-bottom: 1px solid ${COLORS.border};
+  }
+  .og-table { margin-bottom: 6px; }
+  .og-table thead { display: table-header-group; }
+  .og-table tr { page-break-inside: avoid; }
+  .og-table td.og-tooth { white-space: nowrap; }
+  .og-table .og-sub { font-size: 10px; color: ${COLORS.muted}; margin-top: 1px; }
+  .og-dot {
+    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.2); margin-right: 5px; vertical-align: -1px;
+  }
+  .og-tag {
+    display: inline-block; padding: 0 5px; border-radius: 8px; font-size: 9.5px;
+    background: ${COLORS.azureSoft}; color: ${COLORS.navy}; border: 1px solid ${COLORS.border};
+  }
+  /* Proposed work is dashed here for the same reason it is dashed on the chart: a plan that
+     looks like a completed treatment is how a patient gets treated twice. */
+  .og-pill {
+    display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 9.5px;
+    font-weight: 700; white-space: nowrap;
+  }
+  .og-pill.present { border: 1.4px solid ${COLORS.navy}; color: ${COLORS.navy}; background: #fff; }
+  .og-pill.proposed { border: 1.4px dashed ${COLORS.azure}; color: ${COLORS.azure}; background: #fff; }
+  .og-plan-block { margin-bottom: 10px; page-break-inside: auto; }
+  .og-plan {
+    font-size: 11.5px; font-weight: 700; color: ${COLORS.navy};
+    margin: 6px 0 3px; padding-left: 2px;
+  }
+  .og-table tr.og-phase td {
+    background: ${COLORS.azureSoft}; font-weight: 700; color: ${COLORS.navy};
+    font-size: 10.5px; padding: 3px 8px;
+  }
+
   .note-block { margin-bottom: 8px; page-break-inside: avoid; }
   .note-block .ntype { font-weight: 700; color: ${COLORS.azure}; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
   /* pre-wrap keeps the indentation of a written-up examination note (FINDINGS,

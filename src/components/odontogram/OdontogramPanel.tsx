@@ -166,14 +166,15 @@ export function OdontogramPanel({
         <select
           value={dentition}
           onChange={(e) => setDentition(e.target.value as Dentition | 'mixed')}
-          style={{ fontSize: 12, padding: '2px 6px' }}
+          style={{ fontSize: 12, padding: '2px 6px', width: 'auto', flex: '0 0 auto' }}
           title="Which dentition to chart"
         >
           <option value="permanent">Permanent (1–32)</option>
           <option value="primary">Primary (A–T)</option>
           <option value="mixed">Mixed</option>
         </select>
-        <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowRoots((v) => !v)}
+        <button type="button" className="btn btn-sm btn-ghost" style={{ flex: '0 0 auto' }}
+          onClick={() => setShowRoots((v) => !v)}
           title="Show or hide the root band. Implants, root canals and abscesses are root findings.">
           {showRoots ? 'Crowns only' : 'Show roots'}
         </button>

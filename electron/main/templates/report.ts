@@ -1,10 +1,32 @@
 import { htmlShell } from './docStyles'
 import { esc, nl2br, formatDate, formatDateTime, age } from './util'
+import {
+  buildOdontogramLegend,
+  buildOdontogramSvg,
+  compareTeeth,
+  hasOdontogramContent,
+  isChartable
+} from './odontogramSvg'
+import { Odontogram } from '../odontogramRepo'
 import { logoLockupSvg } from '@shared/branding'
 import { CONDITIONS } from '@shared/dental'
 import { toothChartSvgString } from '@shared/toothChart'
 import { REPORT_STRINGS } from '@shared/reportStrings'
 import { COPYRIGHT } from '@shared/legal'
+import {
+  STATUS_LABELS,
+  TOOTH_BY_ID,
+  isPrimary,
+  surfaceShorthand,
+  type ClinicalStatus,
+  type OdontogramData,
+  type Procedure,
+  type ToothCondition,
+  type ToothId
+} from '@shared/odontogram'
+// The palette the chart is drawn with, so the table and the drawing name a finding the
+// same way. Imported, never restated.
+import { CONDITION_STYLE, isProposed } from '../../../src/components/odontogram/conditionStyle'
 import type {
   Patient,
   ClinicSettings,
@@ -25,16 +47,308 @@ export interface ReportRenderInput {
   language: Language
   summaryNote?: string
   approvedAt: string | null
+  /**
+   * The chart to print. Optional: when the caller does not supply one the exam's odontogram
+   * is read here, and an exam that has no odontogram rows still prints the legacy chart.
+   * Pass `null` to force the legacy path (the self-test and unit tests do).
+   */
+  odontogram?: OdontogramData | null
 }
 
 const PRIORITY_ORDER: Record<string, number> = { urgent: 0, important: 1, routine: 2 }
 
+// Labels for the odontogram sections. reportStrings.ts is the shared table for the rest of
+// the report; these live here because the odontogram arrived after it, and a patient whose
+// record is in Spanish or Arabic must not get an English chart bolted onto it.
+interface ChartStrings {
+  findingsByTooth: string
+  chartKey: string
+  tooth: string
+  condition: string
+  surfaces: string
+  status: string
+  recorded: string
+  provider: string
+  procedures: string
+  phase: string
+  code: string
+  procedure: string
+  teeth: string
+  date: string
+  noPlan: string
+  accepted: string
+  notAccepted: string
+  material: string
+  note: string
+  primaryWord: string
+  primaryTag: string
+  keyPresent: string
+  keyProposed: string
+}
+
+const CHART_STRINGS: Record<Language, ChartStrings> = {
+  english: {
+    findingsByTooth: 'Findings by Tooth',
+    chartKey: 'Chart Key',
+    tooth: 'Tooth',
+    condition: 'Condition',
+    surfaces: 'Surfaces',
+    status: 'Status',
+    recorded: 'Recorded',
+    provider: 'Provider',
+    procedures: 'Procedures',
+    phase: 'Phase',
+    code: 'Code',
+    procedure: 'Procedure',
+    teeth: 'Teeth',
+    date: 'Date',
+    noPlan: 'Not in a treatment plan',
+    accepted: 'accepted',
+    notAccepted: 'not accepted',
+    material: 'Material',
+    note: 'Note',
+    primaryWord: 'PRIMARY',
+    primaryTag: 'primary',
+    keyPresent: 'Solid outline: already in the mouth',
+    keyProposed: 'Dashed, hollow: planned, not yet done'
+  },
+  spanish: {
+    findingsByTooth: 'Hallazgos por Diente',
+    chartKey: 'Clave del Diagrama',
+    tooth: 'Diente',
+    condition: 'Condición',
+    surfaces: 'Superficies',
+    status: 'Estado',
+    recorded: 'Registrado',
+    provider: 'Proveedor',
+    procedures: 'Procedimientos',
+    phase: 'Fase',
+    code: 'Código',
+    procedure: 'Procedimiento',
+    teeth: 'Dientes',
+    date: 'Fecha',
+    noPlan: 'Fuera de un plan de tratamiento',
+    accepted: 'aceptado',
+    notAccepted: 'no aceptado',
+    material: 'Material',
+    note: 'Nota',
+    primaryWord: 'TEMPORAL',
+    primaryTag: 'temporal',
+    keyPresent: 'Contorno sólido: ya presente en la boca',
+    keyProposed: 'Contorno discontinuo: planificado, aún no realizado'
+  },
+  arabic: {
+    findingsByTooth: 'النتائج حسب السن',
+    chartKey: 'مفتاح المخطط',
+    tooth: 'السن',
+    condition: 'الحالة',
+    surfaces: 'الأسطح',
+    status: 'الوضع',
+    recorded: 'تاريخ التسجيل',
+    provider: 'مقدم الخدمة',
+    procedures: 'الإجراءات',
+    phase: 'المرحلة',
+    code: 'الرمز',
+    procedure: 'الإجراء',
+    teeth: 'الأسنان',
+    date: 'التاريخ',
+    noPlan: 'خارج خطة علاجية',
+    accepted: 'مقبولة',
+    notAccepted: 'غير مقبولة',
+    material: 'المادة',
+    note: 'ملاحظة',
+    primaryWord: 'لبني',
+    primaryTag: 'لبني',
+    keyPresent: 'خط متصل: موجود في الفم',
+    keyProposed: 'خط متقطع: مخطط، لم يُنفَّذ بعد'
+  }
+}
+
+/**
+ * The chart to print. An explicit `odontogram` (including `null`) always wins; otherwise the
+ * exam's own chart is read. A read that fails falls back to the legacy chart rather than
+ * failing the PDF — a report with the old chart beats no report at all in a clinic.
+ */
+function resolveOdontogram(input: ReportRenderInput): OdontogramData | null {
+  if (input.odontogram !== undefined) return input.odontogram
+  try {
+    return Odontogram.get(input.exam.id)
+  } catch (e) {
+    console.warn('[report] odontogram unavailable, printing the legacy chart:', e)
+    return null
+  }
+}
+
+/** A status pill that reads in greyscale: the word itself, dashed when the work is proposed. */
+function statusPill(status: ClinicalStatus): string {
+  const cls = isProposed(status) ? 'og-pill proposed' : 'og-pill present'
+  return `<span class="${cls}">${esc(STATUS_LABELS[status] ?? status)}</span>`
+}
+
+function conditionCell(c: ToothCondition, s: ChartStrings): string {
+  const style = CONDITION_STYLE[c.type]
+  const label = style ? style.label : c.type
+  const swatch = style
+    ? `<span class="og-dot" style="background:${style.color}"></span>`
+    : ''
+  const extras: string[] = []
+  if (c.material && c.material.trim()) extras.push(`${esc(s.material)}: ${esc(c.material.trim())}`)
+  if (c.note && c.note.trim()) extras.push(`${esc(s.note)}: ${esc(c.note.trim())}`)
+  return (
+    `${swatch}${esc(label)}` +
+    (extras.length ? `<div class="og-sub">${extras.join(' · ')}</div>` : '')
+  )
+}
+
+function toothCell(id: ToothId, s: ChartStrings): string {
+  const info = TOOTH_BY_ID.get(id)
+  return (
+    `<b>${esc(id)}</b>` +
+    (isPrimary(id) ? ` <span class="og-tag">${esc(s.primaryTag)}</span>` : '') +
+    (info ? `<div class="og-sub">${esc(info.label)}</div>` : '')
+  )
+}
+
+/**
+ * Every finding on every tooth, in chart order. This is the table the legacy chart could not
+ * produce: it carries several rows for one tooth, primary teeth, and the lifecycle.
+ */
+function findingsTable(data: OdontogramData, s: ChartStrings): string {
+  // Exactly the rows the chart drew: a table listing a finding the drawing cannot show
+  // (an unknown tooth, an unknown condition) is a second version of the record.
+  const rows = [...data.conditions]
+    .filter(isChartable)
+    .sort(
+      (a, b) =>
+        compareTeeth(a.tooth, b.tooth) ||
+        (CONDITION_STYLE[a.type]?.z ?? 0) - (CONDITION_STYLE[b.type]?.z ?? 0) ||
+        String(a.date_recorded).localeCompare(String(b.date_recorded))
+    )
+  if (!rows.length) return ''
+
+  const body = rows
+    .map(
+      (c) => `<tr>
+        <td class="og-tooth">${toothCell(c.tooth, s)}</td>
+        <td>${conditionCell(c, s)}</td>
+        <td>${esc(surfaceShorthand(c.surfaces || []) || '—')}</td>
+        <td>${statusPill(c.status)}</td>
+        <td>${esc(c.provider_name || '—')}</td>
+        <td>${formatDate(c.date_recorded)}</td>
+      </tr>`
+    )
+    .join('')
+
+  return `<section class="og-table-section">
+    <h2>${esc(s.findingsByTooth)}</h2>
+    <table class="og-table">
+      <thead><tr>
+        <th style="width:96px">${esc(s.tooth)}</th>
+        <th>${esc(s.condition)}</th>
+        <th style="width:64px">${esc(s.surfaces)}</th>
+        <th style="width:82px">${esc(s.status)}</th>
+        <th style="width:112px">${esc(s.provider)}</th>
+        <th style="width:104px">${esc(s.recorded)}</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+  </section>`
+}
+
+/**
+ * Procedures grouped by treatment plan, then by phase — the sequence the work is done in.
+ * MONEY IS OUT OF SCOPE: fee, insurance_estimate and patient_portion are modelled on the
+ * Procedure but deliberately never printed here.
+ */
+function proceduresTable(data: OdontogramData, s: ChartStrings): string {
+  const procedures = data.procedures || []
+  if (!procedures.length) return ''
+
+  const byPlan = new Map<number | null, Procedure[]>()
+  for (const p of procedures) {
+    const key = p.tx_plan_id ?? null
+    const list = byPlan.get(key)
+    if (list) list.push(p)
+    else byPlan.set(key, [p])
+  }
+
+  // Named plans first, in the order the clinic created them; loose procedures last.
+  const planOrder: Array<number | null> = [
+    ...(data.plans || []).map((p) => p.id).filter((id) => byPlan.has(id)),
+    ...[...byPlan.keys()].filter((k) => k !== null && !(data.plans || []).some((p) => p.id === k)),
+    ...(byPlan.has(null) ? [null] : [])
+  ]
+
+  const showCode = procedures.some((p) => p.code && p.code.trim())
+  const cols = showCode ? 7 : 6
+
+  const groups = planOrder
+    .map((planId) => {
+      const list = (byPlan.get(planId) || []).slice().sort((a, b) => a.phase - b.phase || a.id - b.id)
+      if (!list.length) return ''
+      const plan = (data.plans || []).find((p) => p.id === planId)
+      const heading = plan
+        ? `<div class="og-plan">${esc(plan.name)} <span class="og-tag">${esc(
+            plan.accepted ? s.accepted : s.notAccepted
+          )}</span></div>`
+        : `<div class="og-plan">${esc(s.noPlan)}</div>`
+
+      // A phase divider before each new phase: phase 1 is done before phase 2, and a plan
+      // printed without that order is a list, not a sequence.
+      const parts: string[] = []
+      let phase: number | null = null
+      for (const p of list) {
+        if (p.phase !== phase) {
+          phase = p.phase
+          parts.push(
+            `<tr class="og-phase"><td colspan="${cols}">${esc(s.phase)} ${esc(String(p.phase))}</td></tr>`
+          )
+        }
+        parts.push(`<tr>
+              ${showCode ? `<td>${esc(p.code || '—')}</td>` : ''}
+              <td>${esc(p.description || '—')}${
+                p.note && p.note.trim() ? `<div class="og-sub">${esc(p.note.trim())}</div>` : ''
+              }</td>
+              <td>${esc((p.teeth || []).join(', ') || '—')}</td>
+              <td>${esc(surfaceShorthand(p.surfaces || []) || '—')}</td>
+              <td>${statusPill(p.status)}</td>
+              <td>${esc(p.provider_name || '—')}</td>
+              <td>${p.date ? formatDate(p.date) : '—'}</td>
+            </tr>`)
+      }
+      const body = parts.join('')
+
+      return `<div class="og-plan-block">${heading}
+        <table class="og-table">
+          <thead><tr>
+            ${showCode ? `<th style="width:64px">${esc(s.code)}</th>` : ''}
+            <th>${esc(s.procedure)}</th>
+            <th style="width:92px">${esc(s.teeth)}</th>
+            <th style="width:60px">${esc(s.surfaces)}</th>
+            <th style="width:82px">${esc(s.status)}</th>
+            <th style="width:112px">${esc(s.provider)}</th>
+            <th style="width:104px">${esc(s.date)}</th>
+          </tr></thead>
+          <tbody>${body}</tbody>
+        </table></div>`
+    })
+    .join('')
+
+  return `<section class="og-table-section">
+    <h2>${esc(s.procedures)}</h2>
+    ${groups}
+  </section>`
+}
+
 export function buildReportHtml(input: ReportRenderInput): string {
   const { clinic: c, patient: p, exam, doctorName } = input
   const t = REPORT_STRINGS[input.language] ?? REPORT_STRINGS.english
-  const toothChartSvg = toothChartSvgString(exam.tooth_chart_data, { upper: t.upper, lower: t.lower })
+  const s = CHART_STRINGS[input.language] ?? CHART_STRINGS.english
 
-  // ---- Condition counts from the tooth chart ----
+  const odontogram = resolveOdontogram(input)
+  const useOdontogram = hasOdontogramContent(odontogram)
+
+  // ---- Legacy chart: still the record for exams charted before the odontogram ----
   const byCondition = new Map<ToothConditionKey, number[]>()
   for (const [num, state] of Object.entries(exam.tooth_chart_data || {})) {
     if (!state || state.condition === 'unexamined') continue
@@ -115,13 +429,41 @@ export function buildReportHtml(input: ReportRenderInput): string {
     }</p>
   </section>`
 
-  const findingsSection = `
+  // ---- Findings: the odontogram when there is one, the legacy chart when there is not ----
+  let findingsSection: string
+  let odontogramTables = ''
+  if (useOdontogram && odontogram) {
+    const chart = buildOdontogramSvg(odontogram, {
+      // The chart SVG carries the pattern tiles; the legend borrows nothing and defines its
+      // own under a different prefix, so the document never holds a duplicate id.
+      idPrefix: 'og-',
+      title: t.examFindings,
+      labels: { upper: t.upper, lower: t.lower, primary: s.primaryWord }
+    })
+    const legend = buildOdontogramLegend(odontogram, {
+      idPrefix: 'ogl-',
+      statusLabels: { present: s.keyPresent, proposed: s.keyProposed }
+    })
+    findingsSection = `
+  <section class="og-block">
+    <h2>${esc(t.examFindings)}</h2>
+    <div class="og-chart">${chart}</div>
+    <div class="og-legend"><div class="og-legend-title">${esc(s.chartKey)}</div>${legend}</div>
+  </section>`
+    odontogramTables = findingsTable(odontogram, s) + proceduresTable(odontogram, s)
+  } else {
+    const toothChartSvg = toothChartSvgString(exam.tooth_chart_data, {
+      upper: t.upper,
+      lower: t.lower
+    })
+    findingsSection = `
   <section>
     <h2>${esc(t.examFindings)}</h2>
     <div class="chart-wrap">${toothChartSvg}</div>
     <div class="counts">${countChips || `<span style="color:#5A6B7B">${esc(t.noConditions)}</span>`}</div>
     ${findingsSummary ? `<ul style="margin:6px 0 0; padding-left:18px">${findingsSummary}</ul>` : ''}
   </section>`
+  }
 
   // Clinical notes grouped by type
   const notesByType = new Map<string, ClinicalNote[]>()
@@ -223,6 +565,7 @@ export function buildReportHtml(input: ReportRenderInput): string {
     ${alertBox}
     ${summarySection}
     ${findingsSection}
+    ${odontogramTables}
     ${notesSection}
     ${planSection}
     ${summaryNoteSection}

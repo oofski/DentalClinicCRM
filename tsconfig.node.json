@@ -21,6 +21,8 @@
     "electron/**/*.ts",
     "shared/**/*.ts",
     "scripts/**/*.mjs",
+    "src/components/odontogram/toothArt.ts",
+    "src/components/odontogram/conditionStyle.ts",
     "electron.vite.config.ts"
   ]
 }

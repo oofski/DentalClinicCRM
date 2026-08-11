@@ -1,6 +1,6 @@
 {
   "name": "giving-smiles",
-  "version": "1.5.6",
+  "version": "1.6.0",
   "description": "Giving Smiles - Dental Clinic Management Software (Windows desktop application)",
   "author": "Software Smiles",
   "license": "UNLICENSED",
@@ -18,7 +18,7 @@
     "dist:linux": "electron-vite build && electron-builder --linux",
     "smoke": "node scripts/smoke-db.mjs",
     "fetch-models": "node scripts/fetch-models.mjs",
-    "corpus": "node scripts/scribe-corpus.mjs && node scripts/scribe-note.mjs && node scripts/legacy-bridge.mjs"
+    "corpus": "node scripts/scribe-corpus.mjs && node scripts/scribe-note.mjs && node scripts/legacy-bridge.mjs && node scripts/report-odontogram.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
