@@ -39,7 +39,12 @@ Use "extraction" when the tooth is to be taken out, "treatment" when it needs ot
 Use the present-state condition (healthy/cavity/filled/missing/implant) otherwise.
 If the dentist says every other tooth is healthy, add the single line: OTHERS|healthy
 Never invent a tooth the dentist did not say. Spoken digit pairs like "two four" mean 24.
-"to 19" means tooth 19. Ignore ages, millimetres, blood pressure, dates and x-ray counts.`
+"to 19" means tooth 19. Ignore ages, millimetres, blood pressure, dates and x-ray counts.
+A dentist states a finding once and then lists the teeth it applies to: in "extracting
+tooth number one, tooth number 16, and 17" ALL THREE are extractions. Give every tooth in
+such a list its own line. Never leave out a tooth that was named.
+A condition belongs only to the teeth of its own statement — do not spread it onto teeth
+from the statement before or after it.`
 
 const EXAMPLE_IN = `Tooth two four needs some treatment, two five needs an extraction, 15 and 16 both have cavities, to 19 needs a root canal ASAP, all the other teeth are healthy.`
 const EXAMPLE_OUT = `T24|treatment|-|-|-
@@ -49,12 +54,28 @@ T16|cavity|-|-|-
 T19|treatment|-|Root Canal|ASAP
 OTHERS|healthy`
 
+// Second worked example, deliberately in real dictated speech rather than clean prose:
+// run-on lists, fillers, and a finding stated once for several teeth. This is the shape
+// that was previously read as a single tooth with the rest silently dropped.
+const EXAMPLE2_IN = `Yeah so tooth number 32, we'll need treatment plus an extraction, for sure to number 31 30, we're gonna both need treatment. I think definitely tooth number 14 11 will have cavities. And I would recommend extracting tooth number one, tooth number 16, and 17. But aside from those, the rest of your teeth look really healthy.`
+const EXAMPLE2_OUT = `T32|extraction|-|Extraction|-
+T31|treatment|-|-|-
+T30|treatment|-|-|-
+T14|cavity|-|-|-
+T11|cavity|-|-|-
+T1|extraction|-|Extraction|-
+T16|extraction|-|Extraction|-
+T17|extraction|-|Extraction|-
+OTHERS|healthy`
+
 function buildPrompt(text: string): string {
   // Qwen1.5 chat template.
   return (
     `<|im_start|>system\n${SYSTEM}<|im_end|>\n` +
     `<|im_start|>user\n${EXAMPLE_IN}<|im_end|>\n` +
     `<|im_start|>assistant\n${EXAMPLE_OUT}<|im_end|>\n` +
+    `<|im_start|>user\n${EXAMPLE2_IN}<|im_end|>\n` +
+    `<|im_start|>assistant\n${EXAMPLE2_OUT}<|im_end|>\n` +
     // Corrections this clinic has already made, so the model adapts to their phrasing.
     fewShotBlock() +
     `<|im_start|>user\n${text}<|im_end|>\n` +

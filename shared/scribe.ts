@@ -389,8 +389,10 @@ function splitSegments(text: string): string[] {
   // A fresh tooth reference mid-clause starts a new statement: "...both have cavities
   // to 19 is going to need a root canal" is two findings, not one. ("to"/"too" are here
   // because ASR writes them for "tooth".) Never splits a leading "Tooth number 32".
+  // "for sure to number 31 30" — the optional "number"/"no."/"#" has to be allowed here
+  // or the new statement is swallowed by the previous one and inherits its condition.
   t = t.replace(
-    /(\S)\s+(?=(?:tooth|teeth|to|too)\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty)\b)/gi,
+    /(\S)\s+(?=(?:tooth|teeth|to|too)\s+(?:number\s+|no\.?\s+|#\s*)?(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty)\b)/gi,
     '$1 ||| '
   )
   const rough = t.split(/(?<=[.;!?])\s+|\n+|\s*\|\|\|\s*/)
@@ -552,6 +554,21 @@ function parseTeeth(clause: string, allowBare: boolean): { refs: ToothRef[]; fla
   return { refs, flags }
 }
 
+/**
+ * Does the clause right after `i` just name teeth, with no condition of its own? Then an
+ * intent stated at `i` with no tooth of its own belongs to those teeth, not to the arch.
+ */
+function namesTeethNext(clauses: string[], i: number): boolean {
+  for (let j = i + 1; j < clauses.length; j++) {
+    const next = clauses[j].trim()
+    if (!next) continue
+    const lower = next.toLowerCase()
+    if (NEEDS_WORK.test(lower) || PRESENT_STATE.some((c) => c.re.test(lower))) return false
+    return parseTeeth(next, true).refs.length > 0
+  }
+  return false
+}
+
 function extractSurfaces(clause: string): SurfaceKey[] {
   const lower = clause.toLowerCase()
   const found = new Set<SurfaceKey>()
@@ -598,14 +615,43 @@ export function analyzeDictation(input: string): ScribeResult {
   let markOthersHealthy = false
   // Findings are grouped per clause so a retraction can drop exactly one group.
   const groups: { teeth: ScribeToothFinding[]; treatments: ScribeTreatment[] }[] = []
-  let pending: ToothRef[] | null = null
+
+  // The intent of the last clause that actually charted something. A dictated list
+  // ("I'd recommend extracting tooth number one, tooth number 16, and 17") states its
+  // intent once and then just names teeth, so the later items have to inherit it.
+  interface Carry {
+    condition: ToothConditionKey
+    procedures: string[]
+    urgency: Partial<ScribeTreatment>
+    text: string
+  }
+  let carry: Carry | null = null
+  // Teeth named with no intent yet, plus the intent they fall back to if nothing claims
+  // them. Holding a fallback is what stops a named tooth from ever vanishing silently.
+  let pending: { refs: ToothRef[]; fallback: Carry | null } | null = null
+
+  const flushPending = (): void => {
+    const p = pending
+    pending = null
+    if (!p || !p.fallback) return
+    const g = { teeth: [] as ScribeToothFinding[], treatments: [] as ScribeTreatment[] }
+    for (const r of p.refs) {
+      g.teeth.push({ tooth: r.tooth, condition: p.fallback.condition, surfaces: [], text: p.fallback.text })
+      for (const t of p.fallback.procedures) {
+        g.treatments.push({ tooth: r.tooth, treatment: t, text: p.fallback.text, ...p.fallback.urgency })
+      }
+    }
+    if (g.teeth.length) groups.push(g)
+  }
   // Only the clause IMMEDIATELY before a retraction is undone. "Scratch that" after a
   // run of filler ("um, wait, actually, no") retracts the filler, not the finding the
   // doctor dictated a sentence earlier.
   let prevClauseProducedFindings = false
   let lastNeedsWork = false
 
-  for (const rawClause of splitSegments(corrected)) {
+  const clauses = splitSegments(corrected)
+  for (let ci = 0; ci < clauses.length; ci++) {
+    const rawClause = clauses[ci]
     const clause = rawClause.trim()
     if (!clause) continue
     const lower = clause.toLowerCase()
@@ -640,7 +686,9 @@ export function analyzeDictation(input: string): ScribeResult {
     // -- asides go to the notes, never to the chart ----------------------------
     if (ASIDE_CONTEXT.test(lower)) {
       notes.push({ text: clause })
-      pending = null
+      // Teeth already named are settled on the way past — an aside is about something
+      // else and must not take findings the doctor had already dictated with it.
+      flushPending()
       continue
     }
 
@@ -652,7 +700,7 @@ export function analyzeDictation(input: string): ScribeResult {
           note: 'Heard an uncertain finding — not charted. Add it manually if you want it recorded.'
         })
       }
-      pending = null
+      flushPending()
       continue
     }
 
@@ -673,26 +721,57 @@ export function analyzeDictation(input: string): ScribeResult {
     const hasIntent = !!condition
     const surfaces = extractSurfaces(clause)
 
-    const { refs, flags: toothFlags } = parseTeeth(clause, hasIntent || surfaces.length > 0)
+    // A clause with no intent of its own may still be part of a dictated list that is
+    // carrying one ("...extracting tooth number one, tooth number 16, and 17"), so bare
+    // numbers are admitted there too — otherwise the tail of the list is thrown away.
+    // A clause that explicitly anchors a tooth ("tooth number 14 11") is reading out a
+    // list, so the bare numbers beside the anchor are teeth too. The measurement and
+    // admin vetoes inside parseTeeth still apply, so "tooth 14 has 3 mm pocketing" does
+    // not become tooth 3.
+    const anchorsATooth = /\b(?:tooth|teeth|number|no\.|#)\s*\d{1,2}\b/i.test(clause)
+    const { refs, flags: toothFlags } = parseTeeth(
+      clause,
+      hasIntent || surfaces.length > 0 || carry != null || anchorsATooth
+    )
     flags.push(...toothFlags)
 
     const procedures = needsWork ? PROCEDURES.filter((p) => p.re.test(lower)).map((p) => p.treatment) : []
+    const urgency = needsWork ? readUrgency(lower) : {}
 
-    // Teeth named here with no clinical intent — the intent may follow
-    // ("apart from 30, which needs a crown"). Hold them for the next clause.
+    // Teeth named here with no clinical intent. The intent may still be coming
+    // ("tooth number 32, we'll need treatment"), so they are held rather than charted
+    // now — but they are NEVER simply dropped. If nothing claims them, they fall back to
+    // the intent of the list they were dictated in.
     if (refs.length && !hasIntent && !surfaces.length) {
-      pending = refs
+      // Consecutive clauses that only name teeth are one dictated list — "tooth number
+      // 14 11" then "and then also one" then "we'll have cavities" is three cavities, so
+      // they accumulate and are claimed together rather than each replacing the last.
+      pending = pending
+        ? { refs: [...pending.refs, ...refs], fallback: pending.fallback ?? carry }
+        : { refs, fallback: carry }
       continue
     }
 
-    // Intent stated here with no tooth — bind to the teeth held from the previous clause.
+    // Intent stated here with no tooth of its own — it belongs to the teeth just named
+    // ("to number 31 30. We're gonna both need treatment"). This beats the list fallback:
+    // an intent stated straight after the teeth is about those teeth.
     let bound = refs
-    if (!bound.length && pending && hasIntent) {
-      bound = pending
-      pending = null
+    if (pending) {
+      if (!bound.length && hasIntent) {
+        bound = pending.refs
+        pending = null
+      } else if (hasIntent && !pending.fallback) {
+        // Both this clause and the held teeth are part of one statement with a single
+        // intent ("Teeth 14, 11 and 1 have cavities") — chart them together.
+        bound = [...pending.refs, ...bound]
+        pending = null
+      } else if (hasIntent || bound.length) {
+        flushPending()
+      }
+      // A clause that states neither a tooth nor a condition is filler ("So yeah",
+      // "I mean") and must leave the held teeth alone — the condition they are waiting
+      // for often comes after it.
     }
-
-    const urgency = needsWork ? readUrgency(lower) : {}
 
     const group = { teeth: [] as ScribeToothFinding[], treatments: [] as ScribeTreatment[] }
     if (bound.length && condition) {
@@ -700,21 +779,33 @@ export function analyzeDictation(input: string): ScribeResult {
       for (const t of procedures) {
         for (const r of bound) group.treatments.push({ tooth: r.tooth, treatment: t, text: clause, ...urgency })
       }
-    } else if (procedures.length && !bound.length) {
+    } else if (procedures.length && !bound.length && !namesTeethNext(clauses, ci)) {
       // Arch-level treatment with no tooth ("she needs a scaling and polishing").
+      // Suppressed when the teeth it applies to are named in the very next breath
+      // ("recommend extracting" — "tooth number one") — that is not an arch-level plan,
+      // it is this plan for those teeth, and they pick it up as the carried intent.
       for (const t of procedures) group.treatments.push({ tooth: null, treatment: t, text: clause, ...urgency })
-    } else if (hasIntent && !bound.length && condition !== 'healthy') {
+    } else if (hasIntent && !bound.length && condition !== 'healthy' && !namesTeethNext(clauses, ci)) {
       flags.push({
         term: clause.slice(0, 48),
         note: 'Heard a finding with no tooth number — not applied to the chart.'
       })
     }
 
-    if (refs.length) pending = null
     const produced = group.teeth.length > 0 || group.treatments.length > 0
     if (produced) groups.push(group)
     prevClauseProducedFindings = produced
+
+    // Remember this clause's intent so the rest of a dictated list can inherit it.
+    // "Healthy" is deliberately not carried: a stray tooth number after "the rest look
+    // healthy" must never be charted healthy on the strength of a list that had ended.
+    // Also carried when this clause charted nothing because it named no tooth at all —
+    // that is exactly the "recommend extracting …" case whose teeth come next.
+    if (condition && condition !== 'healthy' && (produced || (hasIntent && !bound.length))) {
+      carry = { condition, procedures, urgency, text: clause }
+    }
   }
+  flushPending() // nothing named is left unaccounted for at the end of the dictation
 
   const teeth = groups.flatMap((g) => g.teeth)
   const treatments = groups.flatMap((g) => g.treatments)

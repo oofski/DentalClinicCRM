@@ -54,10 +54,159 @@ export async function transcribeBlob(blob: Blob, onProgress?: SpeechProgress): P
   return (await runTranscribe(audio, onProgress)).trim()
 }
 
+// ---------------------------------------------------------------------------
+// Microphone selection
+//
+// getUserMedia with no deviceId records from whatever Windows has set as the DEFAULT
+// input. Plugging in a dedicated USB microphone does not change that default, so a
+// clinic can buy a good microphone and still be recorded through the laptop's built-in
+// one without any sign that it happened. The doctor picks the device explicitly here,
+// the choice is remembered, and the device actually in use is reported back so it can
+// be shown on screen rather than assumed.
+// ---------------------------------------------------------------------------
+
+export interface MicDevice {
+  deviceId: string
+  label: string
+}
+
+const MIC_KEY = 'gs-scribe-mic'
+
+export function getPreferredMic(): string {
+  try {
+    return localStorage.getItem(MIC_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setPreferredMic(deviceId: string): void {
+  try {
+    if (deviceId) localStorage.setItem(MIC_KEY, deviceId)
+    else localStorage.removeItem(MIC_KEY)
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/**
+ * The microphones this computer can record from. Labels are only exposed once the user
+ * has granted microphone access at least once, so an unlabelled device is named by
+ * position rather than shown as a blank row.
+ */
+export async function listMicrophones(): Promise<MicDevice[]> {
+  if (!navigator.mediaDevices?.enumerateDevices) return []
+  let devices: MediaDeviceInfo[]
+  try {
+    devices = await navigator.mediaDevices.enumerateDevices()
+  } catch {
+    return []
+  }
+  return devices
+    .filter((d) => d.kind === 'audioinput')
+    .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Microphone ${i + 1}` }))
+}
+
+/** Fires when a microphone is plugged in or unplugged. Returns an unsubscribe function. */
+export function watchMicrophones(onChange: () => void): () => void {
+  const md = navigator.mediaDevices
+  if (!md?.addEventListener) return () => {}
+  md.addEventListener('devicechange', onChange)
+  return () => md.removeEventListener('devicechange', onChange)
+}
+
+function micConstraints(deviceId?: string): MediaTrackConstraints {
+  const audio: MediaTrackConstraints = {
+    channelCount: 1,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true
+  }
+  // exact, not ideal: a doctor who chose a microphone must not be silently recorded
+  // through a different one. If it has been unplugged we say so instead.
+  if (deviceId) audio.deviceId = { exact: deviceId }
+  return audio
+}
+
+function micError(e: unknown): Error {
+  const name = (e as { name?: string })?.name || ''
+  if (name === 'NotAllowedError')
+    return new Error('Microphone access was blocked. Allow the microphone for Giving Smiles in Windows Settings → Privacy → Microphone.')
+  if (name === 'NotFoundError') return new Error('No microphone was found on this computer.')
+  if (name === 'OverconstrainedError' || name === 'NotReadableError')
+    return new Error('The selected microphone is not available — it may have been unplugged, or another program may be using it. Pick a different microphone.')
+  return new Error('The microphone could not be started.')
+}
+
+/**
+ * A live input-level reading, so the doctor can see the meter move while speaking and
+ * know the microphone is really being heard BEFORE dictating a whole exam into silence.
+ */
+export class MicMeter {
+  private ctx: AudioContext | null = null
+  private analyser: AnalyserNode | null = null
+  // Backed by a plain ArrayBuffer: getFloatTimeDomainData will not accept a view that
+  // might sit on a SharedArrayBuffer, which this app does enable.
+  private buf = new Float32Array(new ArrayBuffer(0))
+  private stream: MediaStream | null = null
+  /** The microphone actually in use, as the operating system names it. */
+  label = ''
+
+  static async open(deviceId?: string): Promise<MicMeter> {
+    const m = new MicMeter()
+    try {
+      m.stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) })
+    } catch (e) {
+      throw micError(e)
+    }
+    m.attach(m.stream)
+    return m
+  }
+
+  /** Meter an already-open recording stream instead of opening a second one. */
+  attach(stream: MediaStream): void {
+    this.label = stream.getAudioTracks()[0]?.label || ''
+    try {
+      const Ctx: typeof AudioContext =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      this.ctx = new Ctx()
+      const src = this.ctx.createMediaStreamSource(stream)
+      this.analyser = this.ctx.createAnalyser()
+      this.analyser.fftSize = 1024
+      this.buf = new Float32Array(new ArrayBuffer(this.analyser.fftSize * 4))
+      src.connect(this.analyser) // analyser only — never routed to the speakers
+    } catch {
+      this.analyser = null // metering is a nicety; recording must still work without it
+    }
+  }
+
+  /** Current loudness, 0..1, already curved so normal speech sits mid-scale. */
+  level(): number {
+    if (!this.analyser) return 0
+    this.analyser.getFloatTimeDomainData(this.buf)
+    let sum = 0
+    for (let i = 0; i < this.buf.length; i++) sum += this.buf[i] * this.buf[i]
+    const rms = Math.sqrt(sum / this.buf.length)
+    return Math.max(0, Math.min(1, Math.sqrt(rms) * 3))
+  }
+
+  close(): void {
+    this.stream?.getTracks().forEach((t) => t.stop())
+    this.stream = null
+    this.analyser = null
+    void this.ctx?.close().catch(() => {})
+    this.ctx = null
+  }
+}
+
 /** Records microphone audio until stopped. Throws a readable error if mic is unavailable. */
 export class Recorder {
   private rec: MediaRecorder | null = null
   private chunks: BlobPart[] = []
+  private meter: MicMeter | null = null
+  /** The microphone this recording is actually coming from. */
+  deviceLabel = ''
   private stream: MediaStream | null = null
   private capTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -74,23 +223,18 @@ export class Recorder {
     return undefined // let the browser choose
   }
 
-  async start(): Promise<void> {
+  async start(deviceId?: string): Promise<void> {
     try {
-      // Mono at the model's own rate keeps the buffer small and avoids a resample.
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      })
+      // Mono keeps the buffer small; the decode step resamples to the model's rate.
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) })
     } catch (e) {
-      const name = (e as { name?: string })?.name || ''
-      if (name === 'NotAllowedError') throw new Error('Microphone access was blocked. Allow the microphone for Giving Smiles in Windows Settings → Privacy → Microphone.')
-      if (name === 'NotFoundError') throw new Error('No microphone was found on this computer.')
-      throw new Error('The microphone could not be started.')
+      throw micError(e)
     }
+    this.deviceLabel = this.stream.getAudioTracks()[0]?.label || ''
+    // Meter the recording stream itself, so the level shown during dictation is the
+    // audio actually being captured rather than a second, separately-opened stream.
+    this.meter = new MicMeter()
+    this.meter.attach(this.stream)
     this.chunks = []
     try {
       const mimeType = Recorder.pickMimeType()
@@ -154,11 +298,18 @@ export class Recorder {
     })
   }
 
+  /** Live input level while recording, 0..1. */
+  level(): number {
+    return this.meter?.level() ?? 0
+  }
+
   cancel(): void {
     if (this.capTimer) {
       clearTimeout(this.capTimer)
       this.capTimer = null
     }
+    this.meter?.close()
+    this.meter = null
     try {
       this.rec?.stop()
     } catch {

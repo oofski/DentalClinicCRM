@@ -3,7 +3,16 @@ import { Modal, useToast } from '@/components/ui'
 import { Icon } from '@/components/icons'
 import { DictateButton } from '@/components/Dictate'
 import { analyzeDictation, type ScribeResult, type ScribeToothFinding, type ScribeTreatment } from '@shared/scribe'
-import { Recorder, transcribeBlob } from '@/lib/speech'
+import {
+  Recorder,
+  transcribeBlob,
+  listMicrophones,
+  watchMicrophones,
+  getPreferredMic,
+  setPreferredMic,
+  MicMeter,
+  type MicDevice
+} from '@/lib/speech'
 import { analyzeWithLlm, runScribeSelfTest, type ScribeSelfTest } from '@/lib/scribeLlm'
 import { rememberExample, exampleCount, clearExamples } from '@/lib/scribeMemory'
 import { CONDITION_LABELS, SURFACES, TEETH } from '@shared/dental'
@@ -61,6 +70,12 @@ export function ScribeModal({
   const [learned, setLearned] = useState(0)
   const [selfTest, setSelfTest] = useState<ScribeSelfTest | null>(null)
   const [recording, setRecording] = useState(false)
+  const [mics, setMics] = useState<MicDevice[]>([])
+  const [micId, setMicId] = useState<string>(() => getPreferredMic())
+  const [micLevel, setMicLevel] = useState(0)
+  const [micInUse, setMicInUse] = useState('')
+  const [testingMic, setTestingMic] = useState(false)
+  const testMeterRef = useRef<MicMeter | null>(null)
   const [busyMsg, setBusyMsg] = useState('')
   const dictRef = useRef<HTMLTextAreaElement>(null)
   const recorderRef = useRef<Recorder | null>(null)
@@ -194,9 +209,14 @@ export function ScribeModal({
     startingRef.current = true
     setBusyMsg('Starting microphone…')
     try {
+      // A microphone test already holds the device; release it before recording.
+      testMeterRef.current?.close()
+      testMeterRef.current = null
+      setTestingMic(false)
       const r = new Recorder()
-      await r.start()
+      await r.start(micId || undefined)
       recorderRef.current = r
+      setMicInUse(r.deviceLabel)
       setRecording(true)
     } catch (e) {
       toast.push(e instanceof Error ? e.message : 'Could not start the microphone', 'error')
@@ -239,9 +259,76 @@ export function ScribeModal({
     if (open) return
     recorderRef.current?.cancel()
     recorderRef.current = null
+    testMeterRef.current?.close()
+    testMeterRef.current = null
     setRecording(false)
+    setTestingMic(false)
     setBusyMsg('')
   }, [open])
+
+  // Keep the microphone list current, including devices plugged in while this is open —
+  // a USB microphone connected after launch must show up without restarting the app.
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    const refresh = () => {
+      void listMicrophones().then((list) => {
+        if (!alive) return
+        setMics(list)
+        // A remembered microphone that is no longer plugged in falls back to the default,
+        // rather than failing every recording with an unavailable-device error.
+        setMicId((cur) => (cur && !list.some((d) => d.deviceId === cur) ? '' : cur))
+      })
+    }
+    refresh()
+    return watchMicrophones(refresh) as () => void
+  }, [open])
+
+  // Live input level, so the doctor can watch the bar move and know the microphone is
+  // really being heard — while testing, and while actually dictating.
+  useEffect(() => {
+    if (!recording && !testingMic) {
+      setMicLevel(0)
+      return
+    }
+    let raf = 0
+    const tick = () => {
+      const src = recording ? recorderRef.current : testMeterRef.current
+      setMicLevel(src?.level() ?? 0)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [recording, testingMic])
+
+  const chooseMic = (id: string) => {
+    setMicId(id)
+    setPreferredMic(id)
+    if (testingMic) {
+      testMeterRef.current?.close()
+      testMeterRef.current = null
+      setTestingMic(false)
+    }
+  }
+
+  const toggleMicTest = async () => {
+    if (testingMic) {
+      testMeterRef.current?.close()
+      testMeterRef.current = null
+      setTestingMic(false)
+      return
+    }
+    try {
+      const m = await MicMeter.open(micId || undefined)
+      testMeterRef.current = m
+      setMicInUse(m.label)
+      setTestingMic(true)
+      // Labels are blank until access has been granted once; now it has been.
+      void listMicrophones().then(setMics)
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : 'Could not open the microphone', 'error')
+    }
+  }
 
   const selectedTeeth = useMemo(
     () => (result ? result.teeth.filter((_, i) => pickTeeth[i]) : []),
@@ -360,6 +447,69 @@ export function ScribeModal({
               Check model
             </button>
           </div>
+        </div>
+
+        <div
+          className="row"
+          style={{ gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}
+        >
+          <span className="muted" style={{ fontSize: 11.5 }}>
+            Microphone
+          </span>
+          <select
+            value={micId}
+            onChange={(e) => chooseMic(e.target.value)}
+            disabled={recording}
+            style={{ fontSize: 12, maxWidth: 260, padding: '2px 6px' }}
+            title="Choose which microphone to record from. Windows' default is used unless you pick one."
+          >
+            <option value="">Windows default microphone</option>
+            {mics.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            disabled={recording || !!busyMsg}
+            onClick={toggleMicTest}
+            title="Open the microphone and show its input level, without recording anything"
+          >
+            {testingMic ? 'Stop test' : 'Test mic'}
+          </button>
+          {(testingMic || recording) && (
+            <>
+              <div
+                aria-hidden
+                style={{
+                  width: 120,
+                  height: 8,
+                  borderRadius: 4,
+                  background: 'rgba(0,0,0,0.12)',
+                  overflow: 'hidden'
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.round(micLevel * 100)}%`,
+                    height: '100%',
+                    background: micLevel > 0.03 ? 'var(--ok, #46B26A)' : 'var(--danger, #E0524A)',
+                    transition: 'width 60ms linear'
+                  }}
+                />
+              </div>
+              <span className="muted" style={{ fontSize: 11.5 }}>
+                {micLevel > 0.03 ? 'hearing you' : 'no sound — say something'}
+              </span>
+            </>
+          )}
+          {micInUse && (
+            <span className="muted" style={{ fontSize: 11.5, width: '100%' }}>
+              Recording from: <b>{micInUse}</b>
+            </span>
+          )}
         </div>
 
         {(recording || busyMsg) && (
