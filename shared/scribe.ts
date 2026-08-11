@@ -344,6 +344,43 @@ const ASIDE_CONTEXT =
 const DISCOURSE =
   /\s+(?=(?:other than that|outside of|apart from|aside from|and then also|and then|along with|moving on|next up)\b)/gi
 
+// A clause carries ONE condition, so two teeth sharing a clause are charted alike. That
+// is right for "15 and 16 both have cavities" and wrong for "8 is missing and 9 has an
+// implant" — there the first condition in the table silently wins for both teeth, and a
+// missing tooth gets charted as an implant. Split such a clause in two, but ONLY when
+// each side states a condition of its own; a side with no condition of its own is
+// sharing the other's intent and must stay attached to it.
+const TOOTH_LEAD =
+  /^(?:(?:tooth|teeth|to|too|number|no|#)\s*)?(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty)\b/i
+
+function statesOwnCondition(s: string): boolean {
+  const l = s.toLowerCase()
+  return NEEDS_WORK.test(l) || PRESENT_STATE.some((c) => c.re.test(l))
+}
+
+function splitSharedAnd(segment: string): string[] {
+  const out: string[] = []
+  let rest = segment
+  for (;;) {
+    const re = /\s+and\s+/gi
+    let cut = -1
+    let m: RegExpExecArray | null
+    while ((m = re.exec(rest)) !== null) {
+      const left = rest.slice(0, m.index)
+      const right = rest.slice(m.index + m[0].length)
+      if (TOOTH_LEAD.test(right) && statesOwnCondition(left) && statesOwnCondition(right)) {
+        cut = m.index
+        break
+      }
+    }
+    if (cut < 0) break
+    out.push(rest.slice(0, cut))
+    rest = rest.slice(cut).replace(/^\s+and\s+/i, '')
+  }
+  out.push(rest)
+  return out
+}
+
 function splitSegments(text: string): string[] {
   let t = text
   // ASR sentence boundary: a lower-case word followed by a capitalised word.
@@ -362,8 +399,10 @@ function splitSegments(text: string): string[] {
     // Clause split — commas and contrastive conjunctions separate one tooth's
     // story from the next.
     for (const part of s.split(/,\s*|\s+\bbut\b\s+|\s+\bwhereas\b\s+|:\s*/i)) {
-      const v = part.trim()
-      if (v) out.push(v)
+      for (const piece of splitSharedAnd(part)) {
+        const v = piece.trim()
+        if (v) out.push(v)
+      }
     }
   }
   return out

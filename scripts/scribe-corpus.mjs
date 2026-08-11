@@ -33,6 +33,12 @@ for (const c of cases) {
     if (!r.treatments.some((x) => x.tooth === t.tooth && x.treatment === t.treatment))
       errs.push(`missing treatment ${t.treatment} on tooth ${t.tooth}`)
   }
+  // Over-treatment guard: booking a procedure onto a tooth that never needed it is a
+  // clinical error, not a harmless extra suggestion, so those cases name it explicitly.
+  for (const t of c.forbidTreatments || []) {
+    if (r.treatments.some((x) => x.tooth === t.tooth && x.treatment === t.treatment))
+      errs.push(`treatment ${t.treatment} must NOT be booked on tooth ${t.tooth}`)
+  }
   if (errs.length) failures.push({ name: c.name, input: c.input, errs })
   else pass++
 }
