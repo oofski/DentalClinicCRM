@@ -16,6 +16,7 @@ import {
 import { analyzeWithLlm, runScribeSelfTest, type ScribeSelfTest } from '@/lib/scribeLlm'
 import { rememberExample, exampleCount, clearExamples } from '@/lib/scribeMemory'
 import { CONDITION_LABELS, SURFACES, TEETH } from '@shared/dental'
+import { composeClinicalNote } from '@shared/scribeNote'
 import type { SurfaceKey, ToothChartData } from '@shared/types'
 
 const labelByNumber = new Map(TEETH.map((t) => [t.number, t.label]))
@@ -65,6 +66,11 @@ export function ScribeModal({
   const [pickTeeth, setPickTeeth] = useState<Record<number, boolean>>({})
   const [pickTx, setPickTx] = useState<Record<number, boolean>>({})
   const [addNote, setAddNote] = useState(true)
+  const [keepVerbatim, setKeepVerbatim] = useState(true)
+  // The note rewrites itself as the doctor ticks findings on and off — until they edit it
+  // by hand, at which point their wording is theirs and is never silently overwritten.
+  const [noteEdited, setNoteEdited] = useState(false)
+  const [noteText, setNoteText] = useState('')
   const [markOthers, setMarkOthers] = useState(false)
   const [words, setWords] = useState(0)
   const [learned, setLearned] = useState(0)
@@ -123,6 +129,9 @@ export function ScribeModal({
     setPickTeeth({})
     setPickTx({})
     setAddNote(true)
+    setKeepVerbatim(true)
+    setNoteEdited(false)
+    setNoteText('')
     setMarkOthers(false)
     saveBuffer('')
   }
@@ -133,6 +142,10 @@ export function ScribeModal({
     setPickTeeth(Object.fromEntries(r.teeth.map((_, i) => [i, true])))
     setPickTx(Object.fromEntries(r.treatments.map((_, i) => [i, true])))
     setAddNote(true)
+    // A fresh reading rebuilds the note; a hand-edited note from an earlier dictation
+    // must not be carried over onto a different patient's findings.
+    setNoteEdited(false)
+    setNoteText('')
     setMarkOthers(r.markOthersHealthy)
   }
 
@@ -352,6 +365,26 @@ export function ScribeModal({
     return n
   }, [result, chart])
 
+  // The written-up note, rebuilt from whatever is currently ticked.
+  const composedNote = useMemo(() => {
+    if (!result) return ''
+    return composeClinicalNote({
+      teeth: selectedTeeth,
+      treatments: selectedTx,
+      markOthersHealthy: markOthers,
+      othersCount,
+      asides: result.notes,
+      transcript: corrected,
+      includeTranscript: keepVerbatim
+    })
+  }, [result, selectedTeeth, selectedTx, markOthers, othersCount, corrected, keepVerbatim])
+
+  const noteDraft = noteEdited ? noteText : composedNote
+  const setNoteEdit = (v: string) => {
+    setNoteEdited(true)
+    setNoteText(v)
+  }
+
   const apply = () => {
     if (!result) return
     const noteTeeth = Array.from(
@@ -360,14 +393,14 @@ export function ScribeModal({
     onApply({
       findings: selectedTeeth,
       treatments: selectedTx,
-      note: addNote && corrected.trim() ? { text: corrected.trim(), teeth: noteTeeth } : null,
+      note: addNote && noteDraft.trim() ? { text: noteDraft.trim(), teeth: noteTeeth } : null,
       markOthersHealthy: markOthers
     })
     const parts: string[] = []
     if (selectedTeeth.length) parts.push(`${selectedTeeth.length} tooth finding(s)`)
     if (markOthers && othersCount) parts.push(`${othersCount} marked healthy`)
     if (selectedTx.length) parts.push(`${selectedTx.length} plan item(s)`)
-    if (addNote && corrected.trim()) parts.push('a note')
+    if (addNote && noteDraft.trim()) parts.push('a note')
     toast.push(parts.length ? `Applied ${parts.join(', ')}` : 'Nothing selected to apply', parts.length ? 'success' : 'info')
     // Teach the Scribe: what was dictated, and what the doctor ACTUALLY accepted after
     // reviewing it. Replayed to the model next time so it adapts to this clinic.
@@ -613,10 +646,54 @@ export function ScribeModal({
           <div className="field" style={{ margin: 0 }}>
             <label>Corrected transcript</label>
             <textarea value={corrected} onChange={(e) => setCorrected(e.target.value)} style={{ minHeight: 70 }} />
-            <label className="row" style={{ gap: 8, alignItems: 'center', fontSize: 13, marginTop: 6 }}>
-              <input type="checkbox" style={{ width: 'auto' }} checked={addNote} onChange={(e) => setAddNote(e.target.checked)} />
-              Add this transcript as a clinical note
-            </label>
+          </div>
+
+          <div className="field" style={{ margin: 0 }}>
+            <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ margin: 0 }}>Clinical note</label>
+              <label className="row" style={{ gap: 6, alignItems: 'center', fontSize: 13, margin: 0 }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={addNote} onChange={(e) => setAddNote(e.target.checked)} />
+                Write this visit up as a note
+              </label>
+              {addNote && (
+                <label className="row" style={{ gap: 6, alignItems: 'center', fontSize: 13, margin: 0 }}>
+                  <input
+                    type="checkbox"
+                    style={{ width: 'auto' }}
+                    checked={keepVerbatim}
+                    onChange={(e) => setKeepVerbatim(e.target.checked)}
+                  />
+                  Keep the word-for-word dictation at the end
+                </label>
+              )}
+            </div>
+            {addNote && (
+              <>
+                <textarea
+                  value={noteDraft}
+                  onChange={(e) => setNoteEdit(e.target.value)}
+                  spellCheck={false}
+                  style={{ minHeight: 190, fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 12.5 }}
+                />
+                <span className="muted" style={{ fontSize: 11.5 }}>
+                  Written from the findings you ticked below and your own words — nothing here is
+                  invented. Edit it freely; {noteEdited ? 'your edits are kept' : 'it rewrites itself as you change the ticks'}.
+                  {noteEdited && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        style={{ padding: '0 6px' }}
+                        onClick={() => setNoteEdited(false)}
+                      >
+                        Rebuild from findings
+                      </button>
+                    </>
+                  )}
+                </span>
+              </>
+            )}
           </div>
 
           <div>

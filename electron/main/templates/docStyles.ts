@@ -79,7 +79,10 @@ export function documentCss(): string {
 
   .note-block { margin-bottom: 8px; page-break-inside: avoid; }
   .note-block .ntype { font-weight: 700; color: ${COLORS.azure}; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
-  .note-block .ncontent { margin-top: 2px; }
+  /* pre-wrap keeps the indentation of a written-up examination note (FINDINGS,
+     TREATMENT PLAN, ...) instead of collapsing it into one run-on paragraph.
+     nl2br has already consumed the newlines, so this cannot double the line breaks. */
+  .note-block .ncontent { margin-top: 2px; white-space: pre-wrap; }
   .note-block .teeth { color: ${COLORS.muted}; font-size: 10.5px; }
 
   .signatures { margin-top: 22px; display: flex; gap: 40px; page-break-inside: avoid; }
