@@ -16,6 +16,7 @@ import {
   ReferralTemplates,
   Referrals
 } from './repositories'
+import { Odontogram, type ActingUser, type CodeImportRow, type StatusEntity } from './odontogramRepo'
 import { exportDatabase, getDbPath, dataDir } from './db'
 import { verifyLogin, changePassword, hashPassword } from './auth'
 import { patientDirs, writeFileBuffer, copyInto, timestampName } from './files'
@@ -279,6 +280,122 @@ export function registerIpc(): void {
     return ok(true)
   })
   ipcMain.handle('notes:listByExam', (_e, examId: number) => Notes.listByExam(examId))
+
+  // ---------------- Odontogram ----------------
+  // Every write is attributed to the signed-in user and lands in tooth_history; an illegal
+  // status move (one the contract's state machine forbids) comes back as a plain message
+  // instead of a rejected promise, so the chart can show it inline.
+  const acting = (): ActingUser => {
+    const u = requireUser()
+    return { id: u.id, name: u.full_name }
+  }
+
+  function attempt<T>(fn: () => T): { ok: true; data: T } | { ok: false; error: string } {
+    try {
+      return ok(fn())
+    } catch (e) {
+      return { ok: false as const, error: e instanceof Error ? e.message : 'Could not save the change' }
+    }
+  }
+
+  ipcMain.handle('odontogram:get', (_e, examinationId: number) => {
+    requireUser()
+    return Odontogram.get(examinationId)
+  })
+
+  ipcMain.handle('odontogram:addCondition', (_e, examinationId: number, input: unknown) =>
+    attempt(() => Odontogram.addCondition(examinationId, (input ?? {}) as Record<string, unknown>, acting()))
+  )
+
+  ipcMain.handle('odontogram:updateCondition', (_e, id: number, patch: unknown) =>
+    attempt(() => Odontogram.updateCondition(id, (patch ?? {}) as Record<string, unknown>, acting()))
+  )
+
+  ipcMain.handle('odontogram:deleteCondition', (_e, id: number) =>
+    attempt(() => {
+      Odontogram.deleteCondition(id, acting())
+      return true
+    })
+  )
+
+  ipcMain.handle('odontogram:setStatus', (_e, entity: StatusEntity, id: number, status: string) =>
+    attempt(() => Odontogram.setStatus(entity, id, status, acting()))
+  )
+
+  ipcMain.handle('odontogram:addBridge', (_e, examinationId: number, input: unknown) =>
+    attempt(() => Odontogram.addBridge(examinationId, (input ?? {}) as Record<string, unknown>, acting()))
+  )
+
+  ipcMain.handle('odontogram:updateBridge', (_e, id: number, patch: unknown) =>
+    attempt(() => Odontogram.updateBridge(id, (patch ?? {}) as Record<string, unknown>, acting()))
+  )
+
+  ipcMain.handle('odontogram:deleteBridge', (_e, id: number) =>
+    attempt(() => {
+      Odontogram.deleteBridge(id, acting())
+      return true
+    })
+  )
+
+  ipcMain.handle('odontogram:addProcedure', (_e, examinationId: number, input: unknown) =>
+    attempt(() => Odontogram.addProcedure(examinationId, (input ?? {}) as Record<string, unknown>, acting()))
+  )
+
+  ipcMain.handle('odontogram:updateProcedure', (_e, id: number, patch: unknown) =>
+    attempt(() => Odontogram.updateProcedure(id, (patch ?? {}) as Record<string, unknown>, acting()))
+  )
+
+  ipcMain.handle('odontogram:deleteProcedure', (_e, id: number) =>
+    attempt(() => {
+      Odontogram.deleteProcedure(id, acting())
+      return true
+    })
+  )
+
+  ipcMain.handle('odontogram:addPlan', (_e, examinationId: number, input: unknown) =>
+    attempt(() => Odontogram.addPlan(examinationId, (input ?? {}) as Record<string, unknown>, acting()))
+  )
+
+  ipcMain.handle('odontogram:updatePlan', (_e, id: number, patch: unknown) =>
+    attempt(() => Odontogram.updatePlan(id, (patch ?? {}) as Record<string, unknown>, acting()))
+  )
+
+  ipcMain.handle('odontogram:deletePlan', (_e, id: number) =>
+    attempt(() => {
+      Odontogram.deletePlan(id, acting())
+      return true
+    })
+  )
+
+  ipcMain.handle('odontogram:listCodes', (_e, includeInactive?: boolean) => {
+    requireUser()
+    return Odontogram.listCodes(!!includeInactive)
+  })
+
+  ipcMain.handle('odontogram:importCodes', (_e, list: CodeImportRow[]) =>
+    attempt(() => {
+      const u = requireUser()
+      const res = Odontogram.importCodes(list || [])
+      Audit.log(
+        u.id,
+        null,
+        'import_procedure_codes',
+        `${res.inserted} added, ${res.updated} updated`
+      )
+      return res
+    })
+  )
+
+  ipcMain.handle('odontogram:history', (_e, examinationId: number, tooth?: string | null) => {
+    requireUser()
+    return Odontogram.history(examinationId, tooth ?? null)
+  })
+
+  // Converts one examination's old-style chart into findings (the startup migration does
+  // this for every examination; this is for a chart written in the old view afterwards).
+  ipcMain.handle('odontogram:importLegacy', (_e, examinationId: number) =>
+    attempt(() => Odontogram.importLegacyChart(examinationId, acting()))
+  )
 
   // ---------------- Consent ----------------
   ipcMain.handle(

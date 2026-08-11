@@ -3,9 +3,31 @@ import { join } from 'node:path'
 import fs from 'node:fs'
 import initSqlJs, { type Database } from 'sql.js'
 import bcrypt from 'bcryptjs'
+import {
+  ODONTOGRAM_DDL,
+  bindOdontogramDb,
+  migrateLegacyToothCharts,
+  seedProcedureCodes,
+  type OdontogramDb
+} from './odontogramRepo'
 
 let db: Database
 let dbPath: string
+
+// The handle the odontogram repository uses to reach this database. It is passed in rather
+// than imported so that odontogramRepo.ts stays free of Electron — see that file's header.
+// `run` deliberately does not persist: the repository batches one write per transaction.
+export const odontogramDbHandle: OdontogramDb = {
+  query,
+  run: (sql, params = []) => {
+    db.run(sql, params)
+  },
+  persist: () => persist(),
+  lastInsertId: () => {
+    const row = queryOne<{ id: number }>('SELECT last_insert_rowid() AS id')
+    return row ? Number(row.id) : 0
+  }
+}
 
 function wasmPath(): string {
   if (app.isPackaged) {
@@ -32,6 +54,7 @@ export async function initDatabase(): Promise<void> {
   }
 
   db.run('PRAGMA foreign_keys = ON;')
+  bindOdontogramDb(odontogramDbHandle)
   createSchema()
   migrate()
   seedDefaults()
@@ -41,6 +64,16 @@ export async function initDatabase(): Promise<void> {
 // Adds columns introduced after v1.0 without disturbing existing installed databases.
 function migrate(): void {
   ensureColumn('patients', 'event_id', 'event_id INTEGER REFERENCES events(id)')
+  // Converts every legacy tooth_chart_data blob into odontogram rows. Idempotent, atomic,
+  // and read-only with respect to the blob itself — see odontogramRepo.ts.
+  const res = migrateLegacyToothCharts()
+  if (res.error) {
+    console.error('[odontogram] chart migration deferred:', res.error)
+  } else if (res.ran && res.conditions > 0) {
+    console.log(
+      `[odontogram] imported ${res.conditions} finding(s) from ${res.examinations} examination(s)`
+    )
+  }
 }
 
 function ensureColumn(table: string, column: string, ddl: string): void {
@@ -194,6 +227,11 @@ function createSchema(): void {
       FOREIGN KEY (doctor_id) REFERENCES users(id)
     );
   `)
+
+  // The odontogram tables (findings, appliances, procedures, plans, codes, tooth history).
+  // Created here with everything else so an existing install picks them up on next launch;
+  // they reference examinations/users, which the block above has already created.
+  db.exec(ODONTOGRAM_DDL)
 }
 
 const DEFAULT_PASSWORD = 'admin123'
@@ -253,6 +291,10 @@ function seedDefaults(): void {
       db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', [key, value])
     }
   }
+
+  // Procedure descriptions only — codes stay blank until the clinic enters the ones they
+  // are licensed for. Skips itself once the list has any rows.
+  seedProcedureCodes()
 }
 
 // ---- Persistence (synchronous write-through, atomic) ----

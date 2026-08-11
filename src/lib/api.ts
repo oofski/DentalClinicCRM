@@ -23,6 +23,19 @@ import type {
   UpdateStatus
 } from '@shared/types'
 import type { CheckInBundle, ImportedCheckIn } from '@shared/checkin'
+import type {
+  BridgeGroup,
+  ClinicalStatus,
+  NewProcedure,
+  NewToothCondition,
+  OdontogramData,
+  Procedure,
+  ProcedureCode,
+  ToothCondition,
+  ToothHistoryEntry,
+  ToothId,
+  TxPlan
+} from '@shared/odontogram'
 
 interface Ok<T = undefined> {
   ok: boolean
@@ -127,6 +140,57 @@ export interface Api {
     saveChart(id: number, data: ToothChartData): Promise<Ok<boolean>>
     saveTreatmentItems(id: number, items: TreatmentItem[]): Promise<Ok<boolean>>
     setStatus(id: number, status: 'in_progress' | 'completed'): Promise<Ok<boolean>>
+  }
+  odontogram: {
+    /** The whole chart for one examination. Empty arrays for an examination with no findings. */
+    get(examinationId: number): Promise<OdontogramData>
+    addCondition(
+      examinationId: number,
+      input: Partial<NewToothCondition> & { tooth: ToothId; type: ToothCondition['type'] }
+    ): Promise<Ok<ToothCondition>>
+    updateCondition(id: number, patch: Partial<NewToothCondition>): Promise<Ok<ToothCondition>>
+    deleteCondition(id: number): Promise<Ok<boolean>>
+    /** Refused with `{ ok: false, error }` when the contract's state machine forbids the move. */
+    setStatus(
+      entity: 'condition' | 'procedure' | 'bridge',
+      id: number,
+      status: ClinicalStatus
+    ): Promise<Ok<ToothCondition | Procedure | BridgeGroup>>
+    addBridge(
+      examinationId: number,
+      input: Partial<Omit<BridgeGroup, 'id' | 'examination_id'>> & { teeth: ToothId[] }
+    ): Promise<Ok<BridgeGroup>>
+    updateBridge(
+      id: number,
+      patch: Partial<Omit<BridgeGroup, 'id' | 'examination_id'>>
+    ): Promise<Ok<BridgeGroup>>
+    deleteBridge(id: number): Promise<Ok<boolean>>
+    addProcedure(
+      examinationId: number,
+      input: Partial<NewProcedure> & { description: string }
+    ): Promise<Ok<Procedure>>
+    updateProcedure(id: number, patch: Partial<NewProcedure>): Promise<Ok<Procedure>>
+    deleteProcedure(id: number): Promise<Ok<boolean>>
+    addPlan(
+      examinationId: number,
+      input: { name: string; accepted?: boolean }
+    ): Promise<Ok<TxPlan>>
+    updatePlan(id: number, patch: { name?: string; accepted?: boolean }): Promise<Ok<TxPlan>>
+    deletePlan(id: number): Promise<Ok<boolean>>
+    /** Clinic-maintained list. Ships with descriptions only — `code` is blank until imported. */
+    listCodes(includeInactive?: boolean): Promise<ProcedureCode[]>
+    importCodes(
+      list: Array<{
+        code?: string
+        description: string
+        category?: string
+        default_fee?: number | null
+        active?: boolean
+      }>
+    ): Promise<Ok<{ inserted: number; updated: number }>>
+    history(examinationId: number, tooth?: ToothId | null): Promise<ToothHistoryEntry[]>
+    /** Imports one examination's legacy tooth_chart_data; a no-op if it already has findings. */
+    importLegacy(examinationId: number): Promise<Ok<number>>
   }
   notes: {
     create(

@@ -88,6 +88,34 @@ const api = {
       invoke('exams:saveTreatmentItems', id, items),
     setStatus: (id: number, status: string) => invoke('exams:setStatus', id, status)
   },
+  odontogram: {
+    get: (examinationId: number) => invoke('odontogram:get', examinationId),
+    addCondition: (examinationId: number, input: unknown) =>
+      invoke('odontogram:addCondition', examinationId, input),
+    updateCondition: (id: number, patch: unknown) =>
+      invoke('odontogram:updateCondition', id, patch),
+    deleteCondition: (id: number) => invoke('odontogram:deleteCondition', id),
+    setStatus: (entity: string, id: number, status: string) =>
+      invoke('odontogram:setStatus', entity, id, status),
+    addBridge: (examinationId: number, input: unknown) =>
+      invoke('odontogram:addBridge', examinationId, input),
+    updateBridge: (id: number, patch: unknown) => invoke('odontogram:updateBridge', id, patch),
+    deleteBridge: (id: number) => invoke('odontogram:deleteBridge', id),
+    addProcedure: (examinationId: number, input: unknown) =>
+      invoke('odontogram:addProcedure', examinationId, input),
+    updateProcedure: (id: number, patch: unknown) =>
+      invoke('odontogram:updateProcedure', id, patch),
+    deleteProcedure: (id: number) => invoke('odontogram:deleteProcedure', id),
+    addPlan: (examinationId: number, input: unknown) =>
+      invoke('odontogram:addPlan', examinationId, input),
+    updatePlan: (id: number, patch: unknown) => invoke('odontogram:updatePlan', id, patch),
+    deletePlan: (id: number) => invoke('odontogram:deletePlan', id),
+    listCodes: (includeInactive?: boolean) => invoke('odontogram:listCodes', includeInactive),
+    importCodes: (list: unknown) => invoke('odontogram:importCodes', list),
+    history: (examinationId: number, tooth?: string | null) =>
+      invoke('odontogram:history', examinationId, tooth),
+    importLegacy: (examinationId: number) => invoke('odontogram:importLegacy', examinationId)
+  },
   notes: {
     create: (examId: number, type: string, content: string, teeth: number[]) =>
       invoke('notes:create', examId, type, content, teeth),
