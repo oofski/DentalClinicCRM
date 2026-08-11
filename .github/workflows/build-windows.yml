@@ -9,6 +9,9 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      # Marketing screenshots. Adding or replacing one must not spend a Windows
+      # runner rebuilding a 400 MB installer and re-releasing an unchanged version.
+      - 'product-shots/**'
   workflow_dispatch:
 
 concurrency:
