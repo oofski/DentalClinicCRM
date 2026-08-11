@@ -111,3 +111,24 @@ export function needsLegacyImport(
 
 /** Statuses that mean a tooth is charted as present-and-done rather than proposed. */
 export const PRESENT: ClinicalStatus[] = ['existing', 'completed', 'condition']
+
+/**
+ * The reverse mapping, used ONLY when something still speaks the old vocabulary — the
+ * Dental Scribe, and the one-time import of a pre-upgrade exam. Deliberately the same
+ * mapping the server-side migration uses, so a finding means the same thing whichever
+ * door it came through.
+ */
+export function fromLegacyCondition(
+  key: ToothConditionKey
+): { type: ConditionType; status: ClinicalStatus } | null {
+  switch (key) {
+    case 'healthy': return { type: 'healthy', status: 'existing' }
+    case 'cavity': return { type: 'caries', status: 'condition' }
+    case 'filled': return { type: 'restoration', status: 'existing' }
+    case 'missing': return { type: 'missing', status: 'existing' }
+    case 'implant': return { type: 'implant', status: 'existing' }
+    case 'treatment': return { type: 'watch', status: 'condition' }
+    case 'extraction': return { type: 'extraction', status: 'planned' }
+    default: return null // 'unexamined' is the absence of a finding, not a finding
+  }
+}

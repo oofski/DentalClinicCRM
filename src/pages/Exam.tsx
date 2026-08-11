@@ -22,6 +22,9 @@ import {
 } from '@shared/dental'
 import { ToothChart } from '@/components/ToothChart'
 import { toothChartSvgString } from '@/components/toothGeometry'
+import { OdontogramPanel } from '@/components/odontogram/OdontogramPanel'
+import { fromLegacyCondition } from '@/components/odontogram/legacyBridge'
+import type { SurfaceKey } from '@shared/odontogram'
 import { Icon } from '@/components/icons'
 import { useToast } from '@/components/ui'
 import { DictateButton } from '@/components/Dictate'
@@ -86,6 +89,8 @@ export default function Exam() {
   const [exam, setExam] = useState<Examination | null>(null)
   const [patient, setPatient] = useState<Patient | null>(null)
   const [chart, setChart] = useState<ToothChartData>({})
+  // Bumped when something outside the panel writes findings, so the chart reloads.
+  const [odontogramKey, setOdontogramKey] = useState(0)
   const [notes, setNotes] = useState<ClinicalNote[]>([])
   const [items, setItems] = useState<TreatmentItem[]>([])
   const [summary, setSummary] = useState('')
@@ -264,29 +269,34 @@ export default function Exam() {
   // Apply the Dental Scribe review: chart tags (which auto-generate per-tooth notes),
   // treatment-plan items, and the corrected transcript as a note.
   const applyScribe = async (a: ScribeApply) => {
+    const current = await api.odontogram.get(eid)
     if (a.findings.length || a.markOthersHealthy) {
-      setChart((prev) => {
-        const next = { ...prev }
-        for (const f of a.findings) {
-          const cur = next[f.tooth] || { condition: 'unexamined', surfaces: [], note: '' }
-          const surfaces = [...cur.surfaces]
-          for (const s of f.surfaces) if (!surfaces.includes(s)) surfaces.push(s)
-          next[f.tooth] = { condition: f.condition ?? cur.condition, surfaces, note: cur.note }
+      // The Scribe writes into the ODONTOGRAM, not the legacy chart. `chart` is now only a
+      // projection of the record, so writing there would be silently overwritten on the
+      // next projection — the doctor's dictation would appear and then vanish.
+      const charted = new Set(current.conditions.map((c) => c.tooth))
+      for (const f of a.findings) {
+        const mapped = f.condition ? fromLegacyCondition(f.condition) : null
+        if (!mapped) continue
+        await api.odontogram.addCondition(eid, {
+          tooth: String(f.tooth),
+          type: mapped.type,
+          status: mapped.status,
+          surfaces: f.surfaces as SurfaceKey[],
+          note: 'Dictated'
+        })
+        charted.add(String(f.tooth))
+      }
+      if (a.markOthersHealthy) {
+        // Only teeth nobody has charted yet — never overwrite an existing finding.
+        for (let n = 1; n <= 32; n++) {
+          if (charted.has(String(n))) continue
+          await api.odontogram.addCondition(eid, {
+            tooth: String(n), type: 'healthy', status: 'existing', surfaces: []
+          })
         }
-        // "All other teeth are healthy" — fill in every tooth that wasn't called out
-        // and isn't already charted, so existing findings are never overwritten.
-        if (a.markOthersHealthy) {
-          const named = new Set(a.findings.map((f) => f.tooth))
-          for (let n = 1; n <= 32; n++) {
-            if (named.has(n)) continue
-            const cur = next[n]
-            if (!cur || cur.condition === 'unexamined') {
-              next[n] = { condition: 'healthy', surfaces: cur?.surfaces || [], note: cur?.note || '' }
-            }
-          }
-        }
-        return next
-      })
+      }
+      setOdontogramKey((k) => k + 1)
     }
     if (a.treatments.length) {
       setItems((prev) => [
@@ -367,7 +377,15 @@ export default function Exam() {
         {savedTag && <span className="muted" style={{ fontSize: 12 }}>● {savedTag}</span>}
       </div>
 
-      <ToothChart value={chart} onChange={setChart} readOnly={!canClinical} />
+      {/* The odontogram is the record. `chart` below is only its projection onto the old
+          format, kept so the existing autosave and PDF paths keep working unchanged. */}
+      <OdontogramPanel
+        examinationId={eid}
+        legacyChart={chart}
+        refreshKey={odontogramKey}
+        readOnly={!canClinical}
+        onProjectLegacy={setChart}
+      />
 
       <div className="grid-2" style={{ gap: 16, alignItems: 'start' }}>
         {/* Clinical notes */}
